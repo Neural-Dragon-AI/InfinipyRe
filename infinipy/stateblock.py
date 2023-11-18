@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import dataclasses
 import uuid
-from typing import Tuple
+from typing import Tuple, List, Optional, TYPE_CHECKING
 
 # Updating the StateBlock class to include methods for dumping the schema and current types as dictionaries
 
@@ -21,7 +21,10 @@ class StateBlock:
     can_act: bool
     can_move: bool
     can_be_moved: bool
-
+    # New attributes for inventory and storage using forward declarations
+    inventory: List['StateBlock'] = field(default_factory=list)
+    inventory_size: int = 10
+    stored_in: Optional['StateBlock'] = None
     def __post_init__(self):
         # Ensuring the 'id' is a valid UUID string
         try:
@@ -36,6 +39,33 @@ class StateBlock:
         valid_sizes = ("small", "medium", "large", "very large")
         if self.size not in valid_sizes:
             raise ValueError(f"Size must be one of {valid_sizes}")
+        
+    @property
+    def position(self):
+        # If the item is stored in another entity, return the position of that entity
+        if self.stored_in:
+            return self.stored_in.position
+        return self._position
+    
+    @position.setter
+    def position(self, value: Tuple[int, int, int]):
+        self._position = value
+
+    def add_to_inventory(self, item: 'StateBlock'):
+        """
+        Adds an item to the inventory.
+        """
+        if len(self.inventory) < self.inventory_size:
+            self.inventory.append(item)
+            item.stored_in = self
+    
+    def remove_from_inventory(self, item: 'StateBlock'):
+        """
+        Removes an item from the inventory.
+        """
+        if item in self.inventory:
+            self.inventory.remove(item)
+            item.stored_in = None
     
     def to_dict(self):
         # Return a dictionary representation of the StateBlock
@@ -51,7 +81,11 @@ class StateBlock:
             "blocks_los": self.blocks_los,
             "can_store": self.can_store,
             "can_be_stored": self.can_be_stored,
-            "can_act": self.can_act
+            "can_act": self.can_act,
+            "can_move": self.can_move,
+            "can_be_moved": self.can_be_moved,
+            "inventory": [item.id for item in self.inventory],
+            "stored_in": self.stored_in.id if self.stored_in else None
         }
     
     @classmethod

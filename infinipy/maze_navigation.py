@@ -5,7 +5,7 @@ from statement import Statement, CompositeStatement, RelationalStatement, Compos
 from affordance import Affordance
 from transformer import Transformer, CompositeTransformer, RelationalTransformer
 import random
-
+import time
 class CharacterBlock(StateBlock):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -148,48 +148,12 @@ def simulate_movement(steps, character, floors, walls):
             move_to_affordance.apply(character, chosen_floor)
         else:
             print("No reachable floors.")
-
+        
         # Display the updated grid
         display_grid([character], floors, walls, map_size)
+        #wait 2 seconds
+        time.sleep(0.5)
 
 # Run the simulation for 10 steps
-simulate_movement(10, characters[0], floors, walls)
+simulate_movement(100, characters[0], floors, walls)
 
-# # Test the display function
-# display_grid(characters, floors, walls, room_size)
-
-# # Affordance for moving
-# def can_move_to(source_block: CharacterBlock, target_block: FloorBlock) -> bool:
-#     return (abs(source_block.position[0] - target_block.position[0]) <= source_block.reach and
-#             abs(source_block.position[1] - target_block.position[1]) <= source_block.reach and
-#             all(wall.position != target_block.position for wall in walls))
-
-# def move_transformer(source_block: CharacterBlock, target_block: FloorBlock):
-#     source_block.position = target_block.position
-
-# # Adjusted the CompositeStatement creation
-# move_to = Affordance(
-#     name="MoveTo",
-#     prerequisites=[
-#         (CompositeStatement([
-#             (Statement("CanMoveTo", CharacterBlock, "Check if character can move to floor", can_move_to), 'position', 'AND')
-#         ]), "source")
-#     ],
-#     consequences=[(Transformer("Move", move_transformer), "source")]
-# )
-
-# # Simulation loop
-# for turn in range(10):
-#     print(f"--- Turn {turn + 1} ---")
-#     character = characters[0]
-#     accessible_floors = [floor for floor in floors if can_move_to(character, floor)]
-    
-#     if accessible_floors:
-#         target_floor = random.choice(accessible_floors)
-#         move_to.apply(character, target_floor)
-#         print(f"Character moved to {character.position}")
-#     else:
-#         print("Character cannot move.")
-
-# # Final position of the character
-# print(f"Final position of the character: {character.position}")
