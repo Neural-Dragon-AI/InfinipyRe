@@ -1,6 +1,7 @@
 from stateblock import StateBlock
 from statement import Statement, CompositeStatement, bigger_than, equals_to, RelationalStatement, CompositeRelationalStatement
 from transformer import Transformer, CompositeTransformer
+from affordance import Affordance
 
 # Example D&D inspired StateBlock instances
 warrior = StateBlock(
@@ -93,3 +94,51 @@ print(f"Is dragon within reach of warrior: {within_reach_statement.apply(warrior
 print(f"Is the warrior within reach of the dragon: {within_reach_statement.apply(dragon, warrior)}")
 print(f"Is treasure chest within reach of warrior: {within_reach_statement.apply(warrior, treasure_chest)}")
 print(f"Is treasure chest within reach of warrior and does it have high hitpoints: {composite_relational_statement.apply(warrior, treasure_chest)}")
+
+# Additional StateBlock for the Healer
+healer = StateBlock(
+    id="4", owner_id="npc3", name="Healer", position=(2, 2, 0), reach=5, hitpoints=80,
+    size="medium", blocks_move=False, blocks_los=False, can_store=False, 
+    can_be_stored=False, can_act=True, can_move=True, can_be_moved=False
+)
+
+# Relational Statement: Is Within Reach
+def is_within_reach(source: StateBlock, target: StateBlock) -> bool:
+    dx = source.position[0] - target.position[0]
+    dy = source.position[1] - target.position[1]
+    distance = (dx**2 + dy**2)**0.5
+    return distance <= source.reach
+
+within_reach_statement = RelationalStatement(
+    "Within Reach",
+    "Checks if the target is within reach of the source",
+    is_within_reach
+)
+
+# Affordance: Open Treasure Chest
+open_treasure_chest = Affordance(
+    "Open Treasure Chest",
+    [within_reach_statement],  # Prerequisite: Warrior must be within reach of the chest
+    [size_change_transformer]  # Consequence: Change the size of the chest
+)
+
+# Affordance: Heal Warrior
+low_hitpoints = Statement("Low Hitpoints", int, "Warrior has low hitpoints", lambda x: x < 50)
+heal_warrior = Affordance(
+    "Heal Warrior",
+    [(low_hitpoints, "target"), within_reach_statement],  # Prerequisites: Warrior must have low hitpoints and be within reach of the healer
+    [heal_transformer]  # Consequence: Increase the warrior's hitpoints
+)
+
+# Testing Affordances
+# Test Open Treasure Chest
+print(f"Can the warrior open the treasure chest? {open_treasure_chest.is_applicable(warrior, treasure_chest)}")
+if open_treasure_chest.is_applicable(warrior, treasure_chest):
+    open_treasure_chest.apply(warrior, treasure_chest)
+    print(f"Treasure chest size after opening: {treasure_chest.size}")
+
+# Test Heal Warrior
+print(f"Can the healer heal the warrior? {heal_warrior.is_applicable(healer, warrior)}")
+if heal_warrior.is_applicable(healer, warrior):
+    heal_warrior.apply(healer, warrior)
+    print(f"Warrior hitpoints after healing: {warrior.hitpoints}")

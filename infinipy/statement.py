@@ -91,27 +91,71 @@ class CompositeStatement:
         return self.apply(state_block)
 
 class RelationalStatement:
-    def __init__(self, name: str, description: str, condition: Callable[[StateBlock, StateBlock], bool]):
+    def __init__(self, name: str, description: str, condition: Callable[[StateBlock, StateBlock, str, str], bool]):
         """
         Initializes the RelationalStatement with a specific condition involving two StateBlocks.
 
         :param name: The name of the statement.
         :param description: A brief description of what the condition checks for.
-        :param condition: A callable that takes two StateBlock instances and returns a boolean.
+        :param condition: A callable that takes two StateBlock instances and two variable names, then returns a boolean.
         """
         self.name = name
         self.description = description
         self.condition = condition
 
-    def apply(self, source_block: StateBlock, target_block: StateBlock) -> bool:
+    def apply(self, source_block: StateBlock, target_block: StateBlock, source_variable: str, target_variable: str) -> bool:
         """
-        Applies the condition to the specified source and target StateBlocks.
+        Applies the condition to the specified source and target StateBlocks and their respective variables.
 
         :param source_block: The StateBlock instance representing the source of the action.
         :param target_block: The StateBlock instance representing the target of the action.
+        :param source_variable: The variable name in the source StateBlock to which the condition will be applied.
+        :param target_variable: The variable name in the target StateBlock to which the condition will be applied.
         :return: True if the condition is met, False otherwise.
         """
-        return self.condition(source_block, target_block)
+        return self.condition(source_block, target_block, source_variable, target_variable)
+
+    def __call__(self, source_block: StateBlock, target_block: StateBlock, source_variable: str, target_variable: str) -> bool:
+        """
+        Allows the instance to be called as a function, which internally calls the apply method.
+
+        :param source_block: The StateBlock instance representing the source of the action.
+        :param target_block: The StateBlock instance representing the target of the action.
+        :param source_variable: The variable name in the source StateBlock to which the condition will be applied.
+        :param target_variable: The variable name in the target StateBlock to which the condition will be applied.
+        :return: True if the condition is met, False otherwise.
+        """
+        return self.apply(source_block, target_block, source_variable, target_variable)
+
+    
+class CompositeRelationalStatement:
+    def __init__(self, relational_conditions: list[Tuple[RelationalStatement, str, str, str]]):
+        """
+        Initializes the CompositeRelationalStatement with a list of tuples.
+
+        :param relational_conditions: A list of tuples in the form 
+                                      [(relational_statement1, 'source_variable1', 'target_variable1', 'AND'), ...].
+        """
+        self.relational_conditions = relational_conditions
+
+    def apply(self, source_block: StateBlock, target_block: StateBlock) -> bool:
+        if not self.relational_conditions:
+            return True
+
+        statement, source_variable, target_variable, condition = self.relational_conditions[0]
+        current_result = statement.apply(source_block, target_block, source_variable, target_variable)
+        for statement, source_variable, target_variable, condition in self.relational_conditions[1:]:
+            next_result = statement.apply(source_block, target_block, source_variable, target_variable)
+            if condition == 'AND':
+                current_result = current_result and next_result
+            elif condition == 'OR':
+                current_result = current_result or next_result
+            elif condition == 'NOT':
+                current_result = not next_result
+            else:
+                raise ValueError(f"Invalid condition: {condition}")
+
+        return current_result
 
     def __call__(self, source_block: StateBlock, target_block: StateBlock) -> bool:
         """
@@ -119,34 +163,10 @@ class RelationalStatement:
 
         :param source_block: The StateBlock instance representing the source of the action.
         :param target_block: The StateBlock instance representing the target of the action.
-        :return: True if the condition is met, False otherwise.
+        :return: True if the composite condition is met, False otherwise.
         """
         return self.apply(source_block, target_block)
-    
-class CompositeRelationalStatement:
-    def __init__(self, relational_conditions: list[Tuple[RelationalStatement, str]]):
-        self.relational_conditions = relational_conditions
 
-    def apply(self, source_block: StateBlock, target_block: StateBlock) -> bool:
-        if not self.relational_conditions:
-            return True
-
-        statement, condition = self.relational_conditions[0]
-        current_result = statement.apply(source_block, target_block)
-        for statement, condition in self.relational_conditions[1:]:
-            if condition == 'AND':
-                current_result = current_result and statement.apply(source_block, target_block)
-            elif condition == 'OR':
-                current_result = current_result or statement.apply(source_block, target_block)
-            elif condition == 'NOT':
-                current_result = not statement.apply(source_block, target_block)
-            else:
-                raise ValueError(f"Invalid condition: {condition}")
-
-        return current_result
-
-    def __call__(self, source_block: StateBlock, target_block: StateBlock) -> bool:
-        return self.apply(source_block, target_block)
 
 
 # Redefining the generic conditions to be used for initializing Statement objects
