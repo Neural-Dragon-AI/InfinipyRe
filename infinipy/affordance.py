@@ -1,6 +1,6 @@
 from stateblock import StateBlock
 from statement import Statement, CompositeStatement, RelationalStatement, CompositeRelationalStatement
-from transformer import Transformer, CompositeTransformer
+from transformer import Transformer, CompositeTransformer, RelationalTransformer
 from typing import List, Tuple, Union, Callable
 
 class Affordance:
@@ -54,6 +54,16 @@ class Affordance:
         :param target_block: The StateBlock representing the target of the action.
         """
         if self.is_applicable(source_block, target_block):
-            for transformer, directionality in self.consequences:
-                block_to_transform = source_block if directionality == 'source' else target_block
-                transformer(block_to_transform)
+            for consequence, directionality in self.consequences:
+                if isinstance(consequence, Transformer):
+                    block_to_transform = source_block if directionality == 'source' else target_block
+                    consequence(block_to_transform)
+                elif isinstance(consequence, RelationalTransformer):
+                    if directionality == 'source':
+                        consequence(source_block, target_block)
+                    elif directionality == 'target':
+                        consequence(target_block, source_block)
+                    else:
+                        raise ValueError("Invalid directionality", directionality)
+                else:
+                    raise ValueError("Invalid transformer type", type(consequence))
