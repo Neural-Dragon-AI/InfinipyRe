@@ -1,7 +1,7 @@
 #we have 3 type of entity character, floor and wall, the floor has an affordance called move_to which changes the position of the source to the floor position, it require the source to be in reach of the target  and have the can_move attribute, there can not be both floor and walls at the same position of course. At each turn the character with reach 1 should know which floors it can move to (by checking the prerequisite for all floors) and move to a random floor tile
 
 from stateblock import StateBlock
-from statement import Statement, CompositeStatement, RelationalStatement, CompositeRelationalStatement, equals_to
+from statement import Statement, CompositeStatement, RelationalStatement, CompositeRelationalStatement, equals_to, positive, has_attribute, is_true
 from affordance import Affordance
 from transformer import Transformer, CompositeTransformer, RelationalTransformer
 import random
@@ -9,6 +9,8 @@ import time
 class CharacterBlock(StateBlock):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.can_store = True  # Indicates that this block can store other blocks in its inventory
+
 
 class FloorBlock(StateBlock):
     def __init__(self, *args, **kwargs):
@@ -18,6 +20,10 @@ class WallBlock(StateBlock):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+class TreasureBlock(StateBlock):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.can_be_stored = True  # Indicates that this block can be stored in an inventory
 
 
 def create_map_with_room(characters, map_size, room_size):
@@ -48,6 +54,11 @@ def create_map_with_room(characters, map_size, room_size):
                                          reach=0, hitpoints=100, size="medium", blocks_move=False, 
                                          blocks_los=False, can_store=False, can_be_stored=False, 
                                          can_act=False, can_move=False, can_be_moved=False))
+     # Adding a treasure
+    treasures = [TreasureBlock(id="treasure_1", owner_id="environment", name="Treasure", position=(2, 2, 0),
+                               reach=0, hitpoints=100, size="small", blocks_move=False, 
+                               blocks_los=False, can_store=False, can_be_stored=True, 
+                               can_act=False, can_move=False, can_be_moved=False)]
 
     # Update character positions if necessary to ensure they're not in a wall
     for character in characters:
@@ -57,11 +68,11 @@ def create_map_with_room(characters, map_size, room_size):
             if valid_floor:
                 character.position = valid_floor.position
 
-    return characters, walls, floors
+    return characters, walls, floors, treasures
 
 
 
-def display_grid(characters, floors, walls, room_size):
+def display_grid(characters, floors, walls, treasures, room_size):
     grid = [[' ' for _ in range(room_size)] for _ in range(room_size)]
 
     # Place walls and floors on the grid
@@ -71,6 +82,11 @@ def display_grid(characters, floors, walls, room_size):
             grid[y][x] = '.'  # Representing floor with '.'
         elif isinstance(block, WallBlock):
             grid[y][x] = '#'  # Representing wall with '#'
+
+    # Place treasures on the grid
+    for treasure in treasures:
+        x, y, _ = treasure.position
+        grid[y][x] = 'T'  # Representing treasure with 'T'
 
     # Place characters on the grid
     for character in characters:
@@ -120,6 +136,41 @@ move_to_affordance = Affordance(
     name="MoveTo",
     prerequisites=[(composite_within_reach, 'source')],
     consequences=[(movement_transformer, 'source')]
+)
+
+
+composite_pickable = CompositeStatement([(has_attribute, "can_be_stored", 'AND'),
+                                         (is_true, "can_be_stored", 'AND')])
+
+def has_storage(source: StateBlock, target: StateBlock):
+    if len(source.inventory) < source.inventory_size:
+        return True
+
+composite_canpick = CompositeStatement([(has_attribute, "can_store", 'AND'),
+                                            (has_storage, "all_block", 'AND')])
+
+
+
+
+def pick_up(source: StateBlock, target: StateBlock):
+    """
+    Adds the target (treasure) to the source's (character's) inventory.
+
+    :param source: The StateBlock representing the character.
+    :param target: The StateBlock representing the treasure.
+    """
+    source.add_to_inventory(target)
+
+pick_up_transformer = RelationalTransformer("Pick Up Transformation", pick_up)
+
+# Define the PickUp affordance
+#requisite for source is coposite_canpick
+#requisite for target is composite_pickable
+#consequence is pick_up_transformer
+pick_up_affordance = Affordance(
+    name="PickUp",
+    prerequisites=[(composite_canpick, 'source'), (composite_pickable, 'target')],
+    consequences=[(pick_up_transformer, 'source')]
 )
 
 

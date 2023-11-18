@@ -7,7 +7,7 @@ class Affordance:
     def __init__(
         self, 
         name: str, 
-        prerequisites: List[Tuple[Union[CompositeStatement, CompositeRelationalStatement], str]], 
+        prerequisites: List[Tuple[Union[Statement, RelationalStatement, CompositeStatement, CompositeRelationalStatement], str]], 
         consequences: List[Tuple[Transformer, str]]
     ):
         """
@@ -15,7 +15,7 @@ class Affordance:
 
         :param name: The name of the affordance.
         :param prerequisites: A list where each item is a tuple:
-                              - (CompositeStatement/CompositeRelationalStatement, 'source'/'target'): 
+                              - (Statement/RelationalStatement/CompositeStatement/CompositeRelationalStatement, 'source'/'target'): 
                                 Condition and directionality.
         :param consequences: A list of tuples, each containing a Transformer and a string ('source' or 'target') 
                              indicating which StateBlock the transformer should be applied to.
@@ -34,15 +34,15 @@ class Affordance:
         """
         for prerequisite, directionality in self.prerequisites:
             primary_block, secondary_block = (source_block, target_block) if directionality == 'source' else (target_block, source_block)
-            
-            if isinstance(prerequisite, CompositeStatement):
+
+            if isinstance(prerequisite, (Statement, CompositeStatement)):
                 if not prerequisite(primary_block):
                     return False
-            elif isinstance(prerequisite, CompositeRelationalStatement):
+            elif isinstance(prerequisite, (RelationalStatement, CompositeRelationalStatement)):
                 if not prerequisite(primary_block, secondary_block):
                     return False
             else:
-                raise ValueError("Invalid prerequisite type",type(prerequisite))
+                raise ValueError("Invalid prerequisite type", type(prerequisite))
 
         return True
 
@@ -55,15 +55,11 @@ class Affordance:
         """
         if self.is_applicable(source_block, target_block):
             for consequence, directionality in self.consequences:
-                if isinstance(consequence, Transformer):
-                    block_to_transform = source_block if directionality == 'source' else target_block
-                    consequence(block_to_transform)
-                elif isinstance(consequence, RelationalTransformer):
-                    if directionality == 'source':
-                        consequence(source_block, target_block)
-                    elif directionality == 'target':
-                        consequence(target_block, source_block)
-                    else:
-                        raise ValueError("Invalid directionality", directionality)
-                else:
-                    raise ValueError("Invalid transformer type", type(consequence))
+                block_to_transform = source_block if directionality == 'source' else target_block
+                consequence.apply(block_to_transform)
+
+    def __call__(self, source_block: StateBlock, target_block: StateBlock):
+        """
+        Allows the instance to be called as a function, which internally calls the apply method.
+        """
+        self.apply(source_block, target_block)

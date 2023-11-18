@@ -10,7 +10,6 @@ class StateBlock:
     id: str
     owner_id: str
     name: str
-    position: Tuple[int, int, int]
     reach: int
     hitpoints: int
     size: str
@@ -21,10 +20,10 @@ class StateBlock:
     can_act: bool
     can_move: bool
     can_be_moved: bool
-    # New attributes for inventory and storage using forward declarations
-    inventory: List['StateBlock'] = field(default_factory=list)
-    inventory_size: int = 10
-    stored_in: Optional['StateBlock'] = None
+    position: Tuple[int, int, int]
+    inventory: List['StateBlock'] = field(default_factory=list)  # Default value arguments
+    inventory_size: int = 10  # Default value argument
+    stored_in: Optional['StateBlock'] = None  # Default value argument
     def __post_init__(self):
         # Ensuring the 'id' is a valid UUID string
         try:
