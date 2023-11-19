@@ -1,4 +1,3 @@
-
 # Overview
 The Crystal Caverns is a mystical underground cave, dimly lit and filled with bioluminescent crystals. It presents a unique light reflection puzzle where players must correctly position and angle smaller crystals to activate a large, central crystal. The room's atmosphere is serene yet mysterious, with an underlying enigma waiting to be solved.
 
