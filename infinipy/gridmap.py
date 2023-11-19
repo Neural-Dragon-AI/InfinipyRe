@@ -50,6 +50,7 @@ class GridMap:
         self._resync_blocks_at_position(position)
 
     def move_entity(self, entity: StateBlock, new_position: Tuple[int, int, int]) -> None:
+        #currently kind of useless being bypassed most often because of how the remov eentity component works for items in inventory
         if self.map_size and not self.is_within_bounds(new_position):
             raise ValueError("New position out of bounds")
         print(f"attemting to move {entity} to {new_position} from {entity.position}")
@@ -260,13 +261,15 @@ class GridMap:
     
     def line_of_sight(self, start: Tuple[int, int, int], end: Tuple[int, int, int]) -> bool:
         line_points = self.line(start, end)
-        
+        visibles_points = []
         # Skip the starting point and iterate through the rest of the points
         for point in line_points[1:]:
             if self.blocks_los.get(point, False):
-                return False
+                return False, visibles_points
+            else:
+                visibles_points.append(point)
 
-        return True
+        return True, visibles_points
     
     def shadow_casting(self, origin: Tuple[int, int, int], max_radius: int = None) -> List[Tuple[int, int, int]]:
         max_radius = max_radius or max(self.map_size)
