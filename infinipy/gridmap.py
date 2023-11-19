@@ -210,9 +210,10 @@ class GridMap:
             (x + 1, y - 1, z), (x + 1, y + 1, z),
             # Include vertical neighbors if needed
         ]
-        condition = self.is_within_bounds(pos) and not self.blocks_move[pos] if check_blocks_move else self.is_within_bounds(pos)
+        
         valid_neighbors = []
         for pos in candidates:
+            condition = self.is_within_bounds(pos) and not self.blocks_move[pos] if check_blocks_move else self.is_within_bounds(pos)
             if condition:
                 valid_neighbors.append(pos)
 
@@ -274,7 +275,8 @@ class GridMap:
         step_size = 0.5  # Decrease the step size for better accuracy
         for angle in range(int(360 / step_size)):  # Adjust the loop range based on the new step size
             visible_cells.extend(self.cast_light(origin, max_radius, math.radians(angle * step_size)))
-
+        #takes only unique values of visible cells
+        visible_cells = list(set(visible_cells))
         return visible_cells
     
     def a_star(self, start: Tuple[int, int, int], goal: Tuple[int, int, int]) -> Optional[List[Tuple[int, int, int]]]:
@@ -306,6 +308,9 @@ class GridMap:
                         heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
         return None  # No path found
+    
+    def heuristic(self, a: Tuple[int, int], b: Tuple[int, int]) -> int:
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
     
     def dijkstra(self, start: Tuple[int, int, int], max_distance: int) -> Dict[Tuple[int, int, int], int]:
         if not isinstance(start, tuple):
