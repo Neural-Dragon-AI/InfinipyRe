@@ -1,4 +1,33 @@
 
+# Overview
+The Crystal Caverns is a mystical underground cave, dimly lit and filled with bioluminescent crystals. It presents a unique light reflection puzzle where players must correctly position and angle smaller crystals to activate a large, central crystal. The room's atmosphere is serene yet mysterious, with an underlying enigma waiting to be solved.
+
+## Room Geometry
+- **Shape**: The room is dome-shaped, enhancing the effects of light reflection.
+- **Size**: Approximately 30 meters in diameter, providing ample space for exploration and puzzle-solving.
+- **Crystal Placement**:
+  - Smaller crystals are scattered throughout the room, some hidden in crevices or behind rock formations.
+  - Designated slots for placing these crystals are located on the walls and floor, each marked subtly to guide players.
+
+## Key Features
+- **Central Crystal**: A large, multifaceted crystal stands at the center of the room, dormant and awaiting activation.
+- **Reflective Crystals**: Various smaller crystals with unique properties:
+  - **Splitter Crystals**: Divide a single beam of light into multiple beams.
+  - **Color-Changing Crystals**: Alter the color of the light passing through.
+  - **Amplifying Crystals**: Intensify and extend the reach of the light beams.
+- **Obstacles**: Some paths of light are blocked by movable rock formations or require bending around corners.
+
+## Mechanics
+- **Crystal Interaction**:
+  - Players can pick up and place smaller crystals into the designated slots.
+  - The angle and position of each crystal can be adjusted to direct light beams towards the central crystal.
+- **Light Beam Manipulation**:
+  - The goal is to manipulate the light beams using the smaller crystals so that they converge on the central crystal.
+  - Correctly aligned beams activate segments of the central crystal, indicated by glowing runes or patterns.
+- **Puzzle Complexity**:
+  - The puzzle starts with simpler configurations, gradually increasing in complexity as more beams and colors are introduced.
+  - Some configurations require specific sequences or combinations of crystal properties to solve.
+
 # Continuous Light Path Mechanic in "Luminous Labyrinth"
 
 ## Core Concept
