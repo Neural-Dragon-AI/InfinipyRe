@@ -1,6 +1,9 @@
 # InfinipyRe
  Infinitely growing game engine
+```
+python -m pip install --editable path_to\InfinipyRe
 
+```
 ## Overview
 This framework offers a sophisticated approach to managing stateful objects, suitable for a variety of applications including simulations, interactive systems, and complex decision-making environments. Its design emphasizes modularity, flexibility, and the capacity to model complex interactions and behaviors in a clear and manageable way.
 

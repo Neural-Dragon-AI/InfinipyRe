@@ -1,5 +1,5 @@
 from typing import Callable, List
-from stateblock import StateBlock
+from infinipy.stateblock import StateBlock
 
 class Transformer:
     def __init__(self, name: str, transformation: Callable[[StateBlock], None]):
@@ -76,3 +76,30 @@ class RelationalTransformer:
         Allows the instance to be called as a function, which internally calls the apply method.
         """
         self.apply(source_block, target_block)
+
+
+class CompositeRelationalTransformer:
+    def __init__(self, relational_transformers: List[RelationalTransformer]):
+        """
+        Initializes the CompositeRelationalTransformer with a list of RelationalTransformer instances.
+
+        :param relational_transformers: A list of RelationalTransformer instances.
+        """
+        self.relational_transformers = relational_transformers
+
+    def apply(self, source_block: StateBlock, target_block: StateBlock):
+        """
+        Applies the sequence of relational transformations to the source and target StateBlocks.
+
+        :param source_block: The StateBlock representing the source of the action.
+        :param target_block: The StateBlock representing the target of the action.
+        """
+        for transformer in self.relational_transformers:
+            transformer.apply(source_block, target_block)
+
+    def __call__(self, source_block: StateBlock, target_block: StateBlock):
+        """
+        Allows the instance to be called as a function, which internally calls the apply method.
+        """
+        self.apply(source_block, target_block)
+

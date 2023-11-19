@@ -1,2 +1,7 @@
 
 *.pyc
+Infinipy.egg-info/*
+Infinipy.egg-info/SOURCES.txt
+Infinipy.egg-info/dependency_links.txt
+Infinipy.egg-info/PKG-INFO
+Infinipy.egg-info/top_level.txt
