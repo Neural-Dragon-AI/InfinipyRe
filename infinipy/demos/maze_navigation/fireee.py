@@ -46,6 +46,7 @@ within_reach_statement = RelationalStatement(
     euclidean_distance
 )
 
+#define the system mechanics for burning
 def burn (source: StateBlock):
     source.burning = True
 
