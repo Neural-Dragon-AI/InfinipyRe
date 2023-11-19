@@ -55,8 +55,9 @@ class StateBlock:
         Adds an item to the inventory.
         """
         if len(self.inventory) < self.inventory_size:
-            self.inventory.append(item)
             item.stored_in = self
+            self.inventory.append(item)
+            
     
     def remove_from_inventory(self, item: 'StateBlock'):
         """

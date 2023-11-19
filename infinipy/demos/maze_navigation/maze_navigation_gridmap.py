@@ -1,10 +1,13 @@
 from infinipy.stateblock import StateBlock
 from infinipy.statement import Statement, CompositeStatement, RelationalStatement, CompositeRelationalStatement
-from infinipy.content.statements import bigger_than, equals_to, has_attribute, is_true
 from infinipy.affordance import Affordance
 from infinipy.transformer import Transformer, CompositeTransformer, RelationalTransformer, CompositeRelationalTransformer
 import random
 import time
+from infinipy.content.statements import bigger_than, equals_to, has_attribute, is_true
+from infinipy.gridmap import GridMap
+from typing import List, Tuple, Optional
+
 class CharacterBlock(StateBlock):
     def __init__(self, *args, can_store=True, can_move=True, can_be_stored=False, can_act=True, can_be_moved=True, **kwargs):
         super().__init__(*args, can_store=can_store, can_move=can_move, can_be_stored=can_be_stored, can_act=can_act, can_be_moved=can_be_moved, **kwargs)
@@ -12,7 +15,7 @@ class CharacterBlock(StateBlock):
 class FloorBlock(StateBlock):
     def __init__(self, *args, can_store=False, can_move=False, can_be_stored=False, can_act=False, can_be_moved=False, **kwargs):
         super().__init__(*args, can_store=can_store, can_move=can_move, can_be_stored=can_be_stored, can_act=can_act, can_be_moved=can_be_moved, **kwargs)
-    
+
 class WallBlock(StateBlock):
     def __init__(self, *args, can_store=False, can_move=False, can_be_stored=False, can_act=False, can_be_moved=False, **kwargs):
         super().__init__(*args, can_store=can_store, can_move=can_move, can_be_stored=can_be_stored, can_act=can_act, can_be_moved=can_be_moved, **kwargs)
@@ -22,7 +25,7 @@ class TreasureBlock(StateBlock):
         super().__init__(*args, can_store=can_store, can_move=can_move, can_be_stored=can_be_stored, can_act=can_act, can_be_moved=can_be_moved, **kwargs)
 
 
-
+## movement logic 
 def euclidean_distance(source: StateBlock, target: StateBlock) -> bool:
     source_position = source.position
     target_position = target.position
@@ -47,8 +50,8 @@ move_to_affordance = Affordance(
     prerequisites=[(within_reach_statement, 'source')],
     consequences=[(movement_transformer, 'source')]
 )
-#define logic for picking up treasure
-#source conditions
+## pick up logic
+# #source conditions
 def has_inventory_space(source: StateBlock):
     if len(source.inventory) < source.inventory_size:
         return True
@@ -72,47 +75,58 @@ pick_up_affordance = Affordance(
     consequences=[(pick_up_transformer, 'source')]
 )
 
-def create_map_with_room(characters, map_size, room_size):
+def create_map_with_gridmap(grid_map: GridMap, map_size: int, room_size: int, characters: List[CharacterBlock]) -> Tuple[List[WallBlock], List[FloorBlock], List[TreasureBlock]]:
     walls = []
     floors = []
     door_x, door_y = room_size - 1, room_size - 2
     for y in range(map_size):
         for x in range(map_size):
             if x == 0 or y == 0 or x == map_size - 1 or y == map_size - 1:
-                walls.append(WallBlock(id=f"wall_{x}_{y}", owner_id="environment", name="Wall", position=(x, y, 0),
-                                       reach=0, hitpoints=100, size="medium", blocks_move=True, blocks_los=True))
+                wall = WallBlock(id=f"wall_{x}_{y}", owner_id="environment", name="Wall", position=(x, y, 0),
+                                 reach=0, hitpoints=100, size="medium", blocks_move=True, blocks_los=True)
+                walls.append(wall)
+                grid_map.add_entity(wall, (x, y, 0))
             elif (x < room_size and y < room_size) and (x == room_size - 1 or y == room_size - 1) and not (x == door_x and y == door_y):
-                walls.append(WallBlock(id=f"wall_{x}_{y}", owner_id="environment", name="Wall", position=(x, y, 0),
-                                       reach=0, hitpoints=100, size="medium", blocks_move=True, blocks_los=True))
+                wall = WallBlock(id=f"wall_{x}_{y}", owner_id="environment", name="Wall", position=(x, y, 0),
+                                 reach=0, hitpoints=100, size="medium", blocks_move=True, blocks_los=True)
+                walls.append(wall)
+                grid_map.add_entity(wall, (x, y, 0))
             else:
-                floors.append(FloorBlock(id=f"floor_{x}_{y}", owner_id="environment", name="Floor", position=(x, y, 0),
-                                         reach=0, hitpoints=100, size="medium", blocks_move=False, blocks_los=False))
+                floor = FloorBlock(id=f"floor_{x}_{y}", owner_id="environment", name="Floor", position=(x, y, 0),
+                                   reach=0, hitpoints=100, size="medium", blocks_move=False, blocks_los=False)
+                floors.append(floor)
+                grid_map.add_entity(floor, (x, y, 0))
 
     treasures = [TreasureBlock(id="treasure_1", owner_id="environment", name="Treasure", position=(door_x, door_y, 0),
                                reach=0, hitpoints=100, size="small", blocks_move=False, blocks_los=False, can_be_stored=True)]
-
-    for character in characters:
-        if any(wall.position == character.position for wall in walls):
-            valid_floor = next((floor for floor in floors if floor.position not in (wall.position for wall in walls)), None)
-            if valid_floor:
-                character.position = valid_floor.position
-
-    return characters, walls, floors, treasures
-
-def display_grid(characters, floors, walls, treasures, map_size):
-    grid = [[' ' for _ in range(map_size)] for _ in range(map_size)]
-    for block in floors + walls:
-        x, y, _ = block.position
-        grid[y][x] = '.' if isinstance(block, FloorBlock) else '#'
     for treasure in treasures:
-        x, y, _ = treasure.position
-        grid[y][x] = 'T'
+        grid_map.add_entity(treasure, treasure.position)
+
     for character in characters:
-        x, y, _ = character.position
-        grid[y][x] = 'C'
+        valid_floor = next((floor for floor in floors if not grid_map.blocks_move.get(floor.position, False)), None)
+        if valid_floor:
+            character.position = valid_floor.position
+            grid_map.add_entity(character, character.position)
+
+    return walls, floors, treasures
+
+def display_grid_with_gridmap(grid_map: GridMap, map_size: int):
+    grid = [[' ' for _ in range(map_size)] for _ in range(map_size)]
+    for position, entities in grid_map.entities.items():
+        x, y, _ = position
+        for entity in entities:
+            if isinstance(entity, FloorBlock):
+                grid[y][x] = '.'
+            elif isinstance(entity, WallBlock):
+                grid[y][x] = '#'
+            elif isinstance(entity, TreasureBlock):
+                grid[y][x] = 'T'
+            elif isinstance(entity, CharacterBlock):
+                grid[y][x] = 'C'
+    
     for row in grid:
         print(' '.join(row))
-    #print summary of character inventory
+    # Print summary of character inventory
     for character in characters:
         print(f"{character.name} has {len(character.inventory)} items in inventory")
 
@@ -122,10 +136,12 @@ room_size = 5
 characters = [CharacterBlock(id="char1", owner_id="player", name="Character", position=(1, 1, 0),
                              reach=1, hitpoints=100, size="small", blocks_move=False, 
                              blocks_los=False, can_store=True, can_move=True)]
-characters, walls, floors, treasures = create_map_with_room(characters, map_size, room_size)
-display_grid(characters, floors, walls, treasures, map_size)
+grid_map = GridMap(map_size=(map_size, map_size))
+walls, floors, treasures = create_map_with_gridmap(grid_map, map_size, room_size, characters)
+display_grid_with_gridmap(grid_map, map_size)
 
-def simulate_movement(steps, character, floors, walls, treasures):
+# Simulate movement and interactions within the grid map
+def simulate_movement_with_gridmap(steps: int, character: CharacterBlock, grid_map: GridMap):
     for step in range(steps):
         print(f"\nStep {step + 1}:")
 
@@ -135,7 +151,8 @@ def simulate_movement(steps, character, floors, walls, treasures):
             chosen_treasure = random.choice(reachable_treasures)
             print(f"Character picks up {chosen_treasure.name} at {chosen_treasure.position}")
             pick_up_affordance.apply(character, chosen_treasure)
-            treasures.remove(chosen_treasure)  # Remove the picked up treasure from the game
+            grid_map.remove_entity(chosen_treasure)  # Remove the picked up treasure from the grid map
+            treasures.remove(chosen_treasure)
         else:
             # Move to a random floor tile if no treasure is picked up
             reachable_floors = [floor for floor in floors if move_to_affordance.is_applicable(character, floor)]
@@ -143,11 +160,12 @@ def simulate_movement(steps, character, floors, walls, treasures):
                 chosen_floor = random.choice(reachable_floors)
                 print(f"Character moves to {chosen_floor.position}")
                 move_to_affordance.apply(character, chosen_floor)
+                grid_map.move_entity(character, chosen_floor.position)
             else:
                 print("No reachable floors or treasures.")
 
-        display_grid(characters, floors, walls, treasures, map_size)
+        display_grid_with_gridmap(grid_map, map_size)
         time.sleep(0.5)
 
 # Run the simulation
-simulate_movement(50, characters[0], floors, walls, treasures)
+simulate_movement_with_gridmap(50, characters[0], grid_map)

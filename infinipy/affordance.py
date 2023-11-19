@@ -24,7 +24,7 @@ class Affordance:
         self.prerequisites = prerequisites
         self.consequences = consequences
 
-    def is_applicable(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> bool:
+    def is_applicable(self, source_block: StateBlock, target_block: Optional[StateBlock] = None , verbose = False) -> bool:
         """
         Checks if the affordance is applicable, considering both the source and target StateBlocks.
 
@@ -40,9 +40,13 @@ class Affordance:
 
             if isinstance(prerequisite, (Statement, CompositeStatement)):
                 if not prerequisite(primary_block):
+                    if verbose:
+                        print(f"Entity {primary_block} does not meet prerequisite {prerequisite.name}")
                     return False
             elif isinstance(prerequisite, (RelationalStatement, CompositeRelationalStatement)):
                 if not prerequisite(primary_block, secondary_block):
+                    if verbose:
+                        print(f"Entity {primary_block} does not meet prerequisite {prerequisite.name} with {secondary_block}")
                     return False
             else:
                 raise ValueError("Invalid prerequisite type", type(prerequisite))
