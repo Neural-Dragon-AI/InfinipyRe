@@ -102,6 +102,19 @@ class LabelManager:
         self.legend_area = legend_area or default_legend_area
         self.saved_labels = {}
         self.font = pygame.font.Font(None, font_size)
+        self.label_hitboxes = {}
+
+    def get_saved_labels(self):
+        return self.saved_labels
+    
+    def set_saved_labels(self, labels):
+        # Convert color lists to tuples
+        converted_labels = {label: tuple(color) for label, color in labels.items()}
+        self.saved_labels = converted_labels
+
+        # Now pass the converted label colors to disable_used_colors
+        color_tuples = [tuple(color) for color in self.saved_labels.values()]
+        self.popup.disable_used_colors(color_tuples)
 
     def handle_events(self, events):
         for event in events:
@@ -138,10 +151,13 @@ class LabelManager:
             self.popup.draw()
 
     def draw_legend(self):
-        x, y, width, height = self.legend_area
+        x, y, width, _ = self.legend_area
+        self.label_hitboxes = {}  # Reset the hitboxes each time the legend is drawn
         for label, color in self.saved_labels.items():
             text_img = self.font.render(f"{label}", True, (0, 0, 0), color)
-            self.screen.blit(text_img, (x, y))
+            text_rect = text_img.get_rect(topleft=(x, y))
+            self.screen.blit(text_img, text_rect)
+            self.label_hitboxes[label] = text_rect
             y += text_img.get_height() + 5  # Adjust y position for the next item
     def get_labels(self):
         # Return a list of label names

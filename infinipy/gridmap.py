@@ -18,6 +18,8 @@ class GridMap:
         self.creation_time = time.time()
         self.human_readable_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.creation_time))
         self.name = f"{name}_{self.human_readable_time}"
+        self.width =self.map_size[0]
+        self.height = self.map_size[1]
 
     def _add_entity_to_position(self, entity: StateBlock, position: Tuple[int, int, int]) -> None:
         self.entities.setdefault(position, []).append(entity)
