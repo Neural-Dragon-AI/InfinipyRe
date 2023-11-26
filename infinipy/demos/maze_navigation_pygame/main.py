@@ -53,13 +53,11 @@ class NPC:
 pygame.init()
 pygame.font.init()
 # renderer = Renderer(grid_map)
-characters = [CharacterBlock(id="char1", owner_id="player", name="Character", position=(21, 39, 0),
+player = CharacterBlock(id="char1", owner_id="player", name="Character", position=(21, 39, 0),
                              reach=1, hitpoints=100, size="small", blocks_move=False, 
-                             blocks_los=False, can_store=True, can_move=True)]
+                             blocks_los=False, can_store=True, can_move=True)
 
 
-player = characters[0]
-# grid_map = create_map_with_gridmap(grid_map, 70, 5, characters) 
 tile_size = 24
 grid_map,tile_size = create_map_from_json()
 grid_map.add_entity(player, player.position)

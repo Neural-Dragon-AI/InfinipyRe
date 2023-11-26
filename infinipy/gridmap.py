@@ -1,7 +1,7 @@
 from typing import Dict, List, Tuple, Optional, Callable, Union, TYPE_CHECKING
 from infinipy.stateblock import StateBlock
-from infinipy.statement import Statement, CompositeStatement, RelationalStatement, CompositeRelationalStatement
-from infinipy.transformer import Transformer, CompositeTransformer, RelationalTransformer, CompositeRelationalTransformer
+from infinipy.statement import Statement, CompositeStatement
+from infinipy.transformer import Transformer, CompositeTransformer
 from infinipy.affordance import Affordance
 import math
 import random
@@ -148,13 +148,13 @@ class GridMap:
             for entity in entities:
                 self._update_blocks_mappings(position, entity)
 
-    def find_entities_by_statement(self, statement: Statement, target: Optional[Statement]=None) -> List[StateBlock]:
+    def find_entities_by_statement(self, statement: Statement, target: Optional[StateBlock]=None) -> List[StateBlock]:
         all_entities = []
         for entity_list in self.entities.values():
             for entity in entity_list:
-                if isinstance(statement, (RelationalStatement, CompositeRelationalStatement)) and statement.apply(entity, target):
+                if target is not None and statement.apply(entity, target):
                     all_entities.append(entity)
-                elif isinstance(statement, (Statement, CompositeStatement)) and statement.apply(entity):
+                elif target is None and statement.apply(entity):
                     all_entities.append(entity)
                 all_entities.extend([item for item in entity.inventory if statement.apply(item)])
         return all_entities

@@ -1,7 +1,7 @@
 from infinipy.stateblock import StateBlock
-from infinipy.statement import Statement, CompositeStatement, RelationalStatement, CompositeRelationalStatement
+from infinipy.statement import Statement, CompositeStatement
 from infinipy.affordance import Affordance
-from infinipy.transformer import Transformer, CompositeTransformer, RelationalTransformer, CompositeRelationalTransformer
+from infinipy.transformer import Transformer, CompositeTransformer
 import random
 import time
 from infinipy.content.statements import bigger_than, equals_to, has_attribute, is_true

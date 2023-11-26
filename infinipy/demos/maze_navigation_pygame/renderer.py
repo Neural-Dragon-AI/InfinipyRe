@@ -13,8 +13,8 @@ class Camera:
 
 class Renderer:
 
-    # RENDER_ORDER = [FloorBlock, WallBlock, TreasureBlock, CharacterBlock]
-    RENDER_ORDER = [TreasureBlock, CharacterBlock]
+    RENDER_ORDER = [FloorBlock, WallBlock, TreasureBlock, CharacterBlock]
+    # RENDER_ORDER = [TreasureBlock, CharacterBlock]
     def __init__(self, grid_map: GridMap, tile_size=24, background_image_path=None, grid_alpha=50, highlight_alpha=50):
         # ... [rest of the existing __init__ code]
         self.grid_alpha = grid_alpha  # Transparency for the gridmap
