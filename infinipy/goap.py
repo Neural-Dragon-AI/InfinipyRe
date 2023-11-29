@@ -8,6 +8,7 @@ from infinipy.transformer import Transformer,CompositeTransformer
 from infinipy.affordance import Affordance
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Union, Tuple
+from datetime import datetime
 
 class GOAPPlanner:
     """
@@ -27,29 +28,30 @@ class GOAPPlanner:
             prerequisites (Dict[str, Statement]): The mapping of statement names to Statement objects.
         """
         self.affordances = affordances
+        self.planning_log = []
         self.prerequisites = self.extract_prerequisites(affordances)
         self.convert_dict={"AND": True, "AND NOT":False}
-        self.planning_steps = []
-
-    def update_planning_step(self, message: str):
+        self.state_transition_log = []
+        
+        
+    def log(self, step: str, details: Dict[str, Any], result: Optional[Any] = None):
         """
-        Update the planning steps with a new message.
+        Log information about a step in the planning process.
 
         Args:
-            message (str): The message to add to the planning steps.
+            step (str): Description of the planning step.
+            details (Dict[str, Any]): Detailed information about the step.
+            result (Optional[Any]): The outcome or result of the step, if applicable.
         """
-        self.planning_steps.append(message)
+        log_entry = {
+            'timestamp': datetime.now(),
+            'step': step,
+            'details': details,
+            'result': result
+        }
+        self.planning_log.append(log_entry)
 
-    def get_and_clear_planning_steps(self) -> List[str]:
-        """
-        Retrieve and clear the planning steps.
-
-        Returns:
-            List[str]: The list of planning steps.
-        """
-        steps = self.planning_steps[:]
-        self.planning_steps = []
-        return steps    
+   
 
     def extract_prerequisites(self, affordances: List[Affordance]) -> Dict[str, Statement]:
         """
@@ -65,164 +67,166 @@ class GOAPPlanner:
             Dict[str, Statement]: A dictionary mapping the names of prerequisites to their corresponding Statement objects.
         """
         prerequisites = {}
+        total_prerequisites = 0
         for affordance in affordances:
             for prerequisite in affordance.prerequisites:
                 prerequisites[prerequisite.name] = prerequisite
-                #each of htis is a composite statement so we now loop through the substatements and add all of them to the prerequisites
+                total_prerequisites += 1
+                # Each of this is a composite statement so we now loop through the substatements and add all of them to the prerequisites
                 for substatement in prerequisite.conditions:
-                    #add the statement to the prerequisites
-                    #pack the statement and condition into a composite statement
+                    # Add the statement to the prerequisites
+                    # Pack the statement and condition into a composite statement
                     compstat = CompositeStatement([substatement])
                     prerequisites[compstat.name] = compstat
                     prerequisites[substatement[0].name] = substatement[0]
-         
-                 
+                    total_prerequisites += 1
+                    # Log the creation of a Composite version of a single statement
+                    self.log("Creating Composite Statement", {"affordance": affordance.name, "prerequisite": prerequisite.name, "composite_statement": compstat.name})
+
+        # Log the total count of affordances and prerequisites
+        self.log("Extracting Prerequisites", {"total_affordances": len(affordances), "total_prerequisites": total_prerequisites})
+        
         return prerequisites
     
-    def get_filtered_subgoals(self,goal: Union[Tuple[CompositeStatement,bool],Tuple[Statement,bool]],entity: StateBlock) -> List[Tuple[Statement,bool]]:
-         # currently only taking the first true_dict would be worth to explore the full list in some proper examples
-        goal_dict_raw= goal[0].force_true(entity)[0]
+    def get_filtered_subgoals(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock) -> List[Tuple[Statement, bool]]:
+        # Currently only taking the first true_dict, but in more complex cases, the full list might be explored
+        goal_dict_raw = goal[0].force_true(entity)[0]
         goal_dict = copy.deepcopy(goal_dict_raw)
-        
-        #selects the subset of goa that are not true right now
+
+        satisfied_subgoals = []
+        target_subgoals = []
+
+        # Selects the subset of goal that are not true right now
         for substatement in goal_dict_raw["sub_statements"]:
-            print(substatement["statement"],substatement["result"])
-            if substatement["result"] == self.prerequisites[substatement["statement"]].apply(entity)[1]["result"]:
-                #pop the substatement if it is already true
-                print(f"removing the statement {substatement['statement']} from the goal because it is  {substatement['result']} and it needs to be {self.prerequisites[substatement['statement']].apply(entity)[1]['result']} in order to apply the action {goal[0].name}")
+            current_result = self.prerequisites[substatement["statement"]].apply(entity)[1]["result"]
+            if substatement["result"] == current_result:
+                # Remove the substatement if it is already true
                 goal_dict["sub_statements"].remove(substatement)
+                satisfied_subgoals.append(substatement["statement"])
             else:
-                print(f"the statement {substatement['statement']} is {self.prerequisites[substatement['statement']].apply(entity)[1]['result']}  , but it needs to be {substatement['result']} in order to apply the action {goal[0].name}")
-        print(len(goal_dict_raw["sub_statements"]),len(goal_dict["sub_statements"]))
+                target_subgoals.append(substatement["statement"])
+
+        # Log the current goal, satisfied constraints, and target subgoals
+        self.log("Filtering Subgoals", {
+            "current_goal": goal[0].name,
+            "satisfied_subgoals": satisfied_subgoals,
+            "target_subgoals": target_subgoals,
+            "entity_name": entity.name
+        })
+
         return goal_dict
 
 
-    def find_terminal_affordances(self, goal: Union[Tuple[CompositeStatement,bool],Tuple[Statement,bool]], entity: StateBlock) -> List[Affordance]:
-        """
-        Find affordances that can directly or indirectly achieve the specified goal.
 
-        Args:
-            goal (CompositeStatement): The goal statement to be achieved as a composite statement or a statement and boolean value.
-            entity: The entity over which the final goal is specified
-
-        Returns:
-            List[Affordance]: A list of affordances that can achieve the goal.
-        """
+    def find_terminal_affordances(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock) -> List[Affordance]:
         terminal_affordances = []
         partial_affordances = []
-        goal_dict = self.get_filtered_subgoals(goal,entity)
+        goal_dict = self.get_filtered_subgoals(goal, entity)
         num_substatements = len(goal_dict["sub_statements"])
-        #create a set of all the substatements in the goal dict
         matched_substatements_set = set()
+
+        # Log the initial state and goal
+        self.log("Finding Terminal Affordances", {"entity_name": entity.name, "goal": goal[0].name, "goal_state": goal[1]})
+
         for affordance in self.affordances:
-                num_matching_substatements = 0
-                matching_substatemtents = []
-                                
-                # print(f"the goal {goal[0].name} is a composite statement")
-                #the goals is a composite statement, same as the consequence object of the affordance so we can directly check if the goal is achieved
-                #first loop is for the different composite transformers of the affordance 
-                # the second loop is for the different transformers of each composite transformer
-                # the third loops are the different consequences of each transformer
-                # the fourth loop is for the different substatements of each consequence (should not be necessary if goal is a composite statement)
-                transformations_dict_list = affordance.force_consequence_true(entity)
-                for composite_transformer in transformations_dict_list:
-                    for transformer in composite_transformer:
-                        for consequence in transformer:
-                            #tries to match the whole composite statement with the conseuquence
-                            if consequence["name"] == goal[0].name and consequence["result"] == goal[1]:
-                                print(consequence["name"],goal[0].name,num_substatements)
-                                terminal_affordances.append((affordance,num_substatements))
-                            else:
-                                print("triny to match substatements")
-                                #tries to match the substatements of the composite statement with the substatements of the consequence
-                                for substatement in consequence["sub_statements"]:
-                                    for goal_substatement in goal_dict["sub_statements"]:
-                                    
-                                        if substatement["statement"] == goal_substatement["statement"] and substatement["result"] == goal_substatement["result"]:
-                                            num_matching_substatements += 1
-                                            matching_substatemtents.append(substatement)
-                                            matched_substatements_set.add(substatement["statement"])
-                if num_matching_substatements == num_substatements:
-                    terminal_affordances.append((affordance,num_substatements)) 
-                    print("found a terminal affordance",affordance.name)
-                    
-                elif num_matching_substatements > 0:
-                    partial_affordances.append((affordance,num_matching_substatements))
-                    print("found a partial affordance",affordance.name)
-                    for substatement in matching_substatemtents:
-                        print(f"the follwoing substatemtens match {substatement}")
+            num_matching_substatements = 0
+            matching_substatements = []
+
+            transformations_dict_list = affordance.force_consequence_true(entity)
+            for composite_transformer in transformations_dict_list:
+                for transformer in composite_transformer:
+                    for consequence in transformer:
+                        if consequence["name"] == goal[0].name and consequence["result"] == goal[1]:
+                            terminal_affordances.append((affordance, num_substatements))
+                            self.log("Terminal Affordance Match", {
+                                "affordance": affordance.name, 
+                                "consequence_matched": consequence["name"], 
+                                "num_substatements_matched": num_substatements,
+                                "entity_name": entity.name
+                            })
+                        else:
+                            for substatement in consequence["sub_statements"]:
+                                for goal_substatement in goal_dict["sub_statements"]:
+                                    if substatement["statement"] == goal_substatement["statement"] and substatement["result"] == goal_substatement["result"]:
+                                        num_matching_substatements += 1
+                                        matching_substatements.append(substatement)
+                                        matched_substatements_set.add(substatement["statement"])
+
+            if num_matching_substatements == num_substatements:
+                terminal_affordances.append((affordance, num_substatements))
+                self.log("Complete Terminal Affordance Found", {"affordance": affordance.name, "matched_substatements": matching_substatements, "entity_name": entity.name})
+            elif num_matching_substatements > 0:
+                partial_affordances.append((affordance, num_matching_substatements))
+                self.log("Partial Affordance Found", {"affordance": affordance.name, "matched_substatements": matching_substatements, "entity_name": entity.name})
+
         if len(matched_substatements_set) < num_substatements and len(terminal_affordances) == 0:
-            print("the goal is not achievable")
-            return [],[]    
-                                                                
-        return terminal_affordances,partial_affordances
+            self.log("Goal Not Achievable", {"goal": goal[0].name, "entity_name": entity.name})
+
+        return terminal_affordances, partial_affordances
+
     
 
 
     def find_subgoals_for_affordance(self, affordance: Affordance, entity: StateBlock) -> List[str]:
-        """
-        Identify subgoals that need to be achieved to make an action applicable.
-
-        Args:
-            action (Affordance): The affordance whose applicability needs to be checked.
-            StateBlock (StateBlock): The StateBlock object representing the current state.
-
-        Returns:
-            List[str]: A list of names of subgoal statements.
-        """
         subgoals = []
         why_not_applicable = affordance.why_not_applicable(entity)
+
+        # Log the initial state and the affordance being evaluated
+        self.log("Evaluating Affordance Applicability", {"affordance": affordance.name, "entity_name": entity.name})
+
         for reason in why_not_applicable:
             subgoals.append(reason[0])
+            # Log each reason why the affordance is not applicable
+            self.log("Identifying Subgoal for Affordance", {
+                "affordance": affordance.name, 
+                "reason": reason, 
+                "subgoal_identified": reason[0],
+                "entity_name": entity.name
+            })
+
         return subgoals
 
-    def is_goal_achieved(self, goal: Union[Tuple[CompositeStatement,bool],Tuple[Statement,bool]], entity: StateBlock) -> bool:
-        """
-        Check if the goal is achieved for the given StateBlock state.
 
-        Args:
-            goal (CompositeStatement): The goal to be checked.
-            StateBlock (StateBlock): The StateBlock object representing the current state.
+    def is_goal_achieved(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock) -> bool:
+        goal_achieved = goal[0].apply(entity)["result"] == goal[1]
 
-        Returns:
-            bool: True if the goal is achieved, False otherwise.
-        """
-        return goal[0].apply(entity)["result"] == goal[1]
+        # Log the goal evaluation process
+        self.log("Evaluating Goal Achievement", {
+            "goal": goal[0].name, 
+            "desired_state": goal[1], 
+            "entity_name": entity.name,
+            "goal_achieved": goal_achieved,
+            "entity_name": entity.name
 
-    
+        })
+
+        return goal_achieved
+
 
     def achieve_goal(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock, applied_actions: List[Affordance] = [], depth: int = 0) -> List[Affordance]:
-        """
-        Recursively achieve the specified goal using terminal affordances.
-
-        Args:
-            goal (Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]]): The goal or subgoal to be achieved.
-            entity (StateBlock): The entity on which the goal is being applied.
-            applied_actions (List[Affordance]): Accumulator for actions applied in the process of achieving the goal.
-            depth (int): Depth of recursion to prevent infinite loops.
-
-        Returns:
-            List[Affordance]: A sequence of affordances that achieve the goal.
-        """
         if depth > 10:  # Avoid infinite recursion
+            self.log("Recursion Limit Reached", {"goal": goal[0].name, "depth": depth, "entity_name": entity.name})
             return applied_actions
 
-        # Check if the goal is already achieved
+        # Log the start of a new recursion level
+        self.log("Achieving Goal - Recursion Start", {"goal": goal[0].name, "depth": depth,"entity_name": entity.name})
+
         if self.is_goal_achieved(goal, entity):
+            self.log("Goal Already Achieved", {"goal": goal[0].name, "depth": depth, "entity_name": entity.name})
             return applied_actions
 
-        # Find terminal affordances that can achieve the goal
         terminal_affordances, _ = self.find_terminal_affordances(goal, entity)
         for affordance, _ in terminal_affordances:
-            # Apply the affordance and update the entity's state
             affordance.apply(entity)
             applied_actions.append(affordance)
-            
-            # Check if the goal is achieved after applying the affordance
+
+            # Log the application of an affordance
+            self.log("Applying Affordance", {"affordance": affordance.name, "depth": depth, "entity_name": entity.name})
+
             if self.is_goal_achieved(goal, entity):
+                self.log("Goal Achieved", {"goal": goal[0].name, "depth": depth, "entity_name": entity.name})
                 return applied_actions
-            
-            # Otherwise, find the next subgoals and recurse
+
             next_subgoals = self.find_subgoals_for_affordance(affordance, entity)
             for subgoal_name in next_subgoals:
                 subgoal_statement = self.prerequisites[subgoal_name]
@@ -230,4 +234,76 @@ class GOAPPlanner:
                 if self.is_goal_achieved(goal, entity):
                     return result
 
+        # Log the end of a recursion level if no affordance achieved the goal
+        self.log("Achieving Goal - Recursion End", {"goal": goal[0].name, "depth": depth, "entity_name": entity.name, "applied_actions": [a.name for a in applied_actions]})
+        
         return applied_actions
+    
+    def print_reasoning(self):
+        """
+        Print an advanced and detailed report of the planning process, utilizing the knowledge of the algorithm and log data.
+        """
+        report = ["GOAP Planning Process Report\n", "="*50 + "\n"]
+
+        for log_entry in self.planning_log:
+            timestamp = log_entry['timestamp'].strftime("%Y-%m-%d %H:%M:%S")
+            step = log_entry['step']
+            details = log_entry['details']
+
+            entry = f"Time: {timestamp}\nStep: {step}\n"
+
+            # Extracting relevant information based on the step
+            if step == "Creating Composite Statement":
+                entry += f"Affordance: {details['affordance']}, Prerequisite: {details['prerequisite']}, Composite Statement Created: {details['composite_statement']}\n"
+
+            elif step == "Extracting Prerequisites":
+                entry += f"Total Affordances Analyzed: {details['total_affordances']}, Total Prerequisites Extracted: {details['total_prerequisites']}\n"
+
+            elif step == "Filtering Subgoals":
+                entry += f"Goal: {details['current_goal']}, Satisfied Subgoals: {', '.join(details['satisfied_subgoals'])}, Target Subgoals: {', '.join(details['target_subgoals'])}, Entity: {details['entity_name']}\n"
+
+            elif step == "Finding Terminal Affordances":
+                entry += f"Entity: {details['entity_name']}, Goal: {details['goal']}, Goal State: {details['goal_state']}\n"
+
+            elif step == "Evaluating Affordance Applicability":
+                entry += f"Affordance: {details['affordance']}, Entity: {details['entity_name']}\n"
+
+            elif step == "Identifying Subgoal for Affordance":
+                entry += f"Affordance: {details['affordance']}, Reason for Non-Applicability: {details['reason']}, Subgoal Identified: {details['subgoal_identified']}, Entity: {details['entity_name']}\n"
+
+            elif step == "Evaluating Goal Achievement":
+                goal_achieved_str = 'Yes' if details['goal_achieved'] else 'No'
+                entry += f"Goal: {details['goal']}, Desired State: {details['desired_state']}, Entity: {details['entity_name']}, Goal Achieved: {goal_achieved_str}\n"
+
+            elif step == "Achieving Goal - Recursion Start" or step == "Achieving Goal - Recursion End":
+                entry += f"Goal: {details['goal']}, Recursion Depth: {details['depth']}, Entity: {details['entity_name']}\n"
+
+            elif step == "Recursion Limit Reached":
+                entry += f"Goal: {details['goal']}, Depth: {details['depth']}, Entity: {details['entity_name']}\n"
+
+            # Adding a separator for readability
+            entry += "-"*50 + "\n"
+            report.append(entry)
+        # Adding the final plan summary
+        final_plan_summary = ["\nFinal Plan Summary\n", "="*30 + "\n"]
+        if self.planning_log:
+            last_log = self.planning_log[-1]
+            if last_log['step'].startswith("Achieving Goal - Recursion End"):
+                details = last_log['details']
+                final_goal = details['goal']
+                actions_taken = [log['details']['affordance'] for log in self.planning_log if log['step'] == "Applying Affordance"]
+                actions_taken.reverse()
+
+                final_plan_summary.append(f"Goal: {final_goal}\n")
+                final_plan_summary.append(f"Target Entity: {details['entity_name']}\n")
+                final_plan_summary.append("Actions Taken to Achieve Goal:\n")
+                for action in actions_taken:
+                    final_plan_summary.append(f" - {action}\n")
+            else:
+                final_plan_summary.append("The goal was not achieved within the planning process.\n")
+
+        # Append the final plan summary to the report
+        report += final_plan_summary
+        full_report = '\n'.join(report)
+        print(full_report)
+
