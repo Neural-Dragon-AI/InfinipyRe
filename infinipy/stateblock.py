@@ -10,9 +10,6 @@ class StateBlock:
     id: str
     owner_id: str
     name: str
-    reach: int
-    hitpoints: int
-    size: str
     blocks_move: bool
     blocks_los: bool
     can_store: bool
@@ -34,10 +31,6 @@ class StateBlock:
             if uuid_obj.hex != self.id.replace('-', ''):
                 self.id = str(uuid.uuid4())
 
-        # Validating 'size' to be one of the specified options
-        valid_sizes = ("small", "medium", "large", "very large")
-        if self.size not in valid_sizes:
-            raise ValueError(f"Size must be one of {valid_sizes}")
         
     @property
     def position(self):
@@ -66,27 +59,6 @@ class StateBlock:
         if item in self.inventory:
             self.inventory.remove(item)
             item.stored_in = None
-    
-    def to_dict(self):
-        # Return a dictionary representation of the StateBlock
-        return {
-            "id": self.id,
-            "owner_id": self.owner_id,
-            "name": self.name,
-            "position": self.position,
-            "reach": self.reach,
-            "hitpoints": self.hitpoints,
-            "size": self.size,
-            "blocks_move": self.blocks_move,
-            "blocks_los": self.blocks_los,
-            "can_store": self.can_store,
-            "can_be_stored": self.can_be_stored,
-            "can_act": self.can_act,
-            "can_move": self.can_move,
-            "can_be_moved": self.can_be_moved,
-            "inventory": [item.id for item in self.inventory],
-            "stored_in": self.stored_in.id if self.stored_in else None
-        }
     
     @classmethod
     def to_schema(cls):
