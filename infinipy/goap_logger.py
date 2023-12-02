@@ -177,7 +177,8 @@ class GOAPLogger:
             if 'entity' in log:
                 if isinstance(log['entity'], StateBlock):
                     report.append(f"Entity: {log['entity'].name}")
-                report.append(f"Entity: {log['entity']}")
+                else:
+                    report.append(f"Entity: {log['entity']}")
 
             # Method-specific keys
             if method == 'is_goal_achieved':

@@ -74,9 +74,14 @@ class Transformer:
 
 class CompositeTransformer:
     def __init__(self, transformers: List[Tuple[Transformer, str]]):
-        #derive name from transformers names
         self.name = f"CompositeTransformer({', '.join([transformer.name for transformer, _ in transformers])})"
         self.transformers = transformers
+        self.composite_consequence = self._create_composite_consequence()
+
+    def _create_composite_consequence(self):
+        # Extract consequences from each transformer and combine them
+        consequences = [transformer.consequences for transformer, _ in self.transformers if transformer.consequences]
+        return CompositeStatement.from_composite_statements(consequences)
 
     def apply(self, source_block: StateBlock, target_block: StateBlock, local_evaluate: bool = False, global_evaluate: bool = False):
         """
@@ -97,12 +102,10 @@ class CompositeTransformer:
                 transformer.apply(source_block, target_block, evaluate=local_evaluate)
 
         if global_evaluate:
-            # Global consequences evaluation
-            global_results = self.apply_consequences(source_block, target_block)
-            if not global_results['result']:
-                raise ValueError(f"Transformation consequences did not meet the expected outcome for composite {self.name}")
-            # Optionally, you can process global_results or raise an exception if any consequence is not met
-
+            result = self.composite_consequence(source_block, target_block)
+            if not result['result']:
+                raise ValueError(f"Global consequences did not meet the expected outcome for composite {self.name} with source {source_block} and target {target_block}")
+            
     def apply_consequences(self, source_block: StateBlock, target_block: StateBlock):
         """
         Applies and evaluates the consequences of the transformations in the composite.

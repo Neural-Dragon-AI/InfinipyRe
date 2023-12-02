@@ -89,19 +89,21 @@ class GOAPPlanner:
     def find_partial_affordances(self, partial_affordances: List[Affordance], goal_substatements: Set[str], entity: StateBlock) -> List[List[Affordance]]:
         valid_partial_combinations = []
 
-        # Iterate over all possible combinations of partial affordances
+        # Iterate through all possible combination lengths
         for i in range(1, len(partial_affordances) + 1):
+            # Generate combinations of partial affordances
             for combo in combinations(partial_affordances, i):
                 combined_substatements = set()
+
+                # Collect sub-statements from all affordances in the combination
                 for aff in combo:
                     aff_consequences = aff.force_consequence_true(entity)
                     for consequence_list in aff_consequences:
                         for consequence_dict in consequence_list:
                             if "sub_statements" in consequence_dict:
-                                # Aggregate substatements for each affordance in the combination
                                 combined_substatements |= set(substmt["statement"] for substmt in consequence_dict["sub_statements"])
-                
-                # Check if the combination of partial affordances covers all sub-statements of the goal
+
+                # Check if the combination covers all goal sub-statements
                 if combined_substatements == goal_substatements:
                     valid_partial_combinations.append(list(combo))
 
