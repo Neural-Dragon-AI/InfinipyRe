@@ -75,22 +75,25 @@ For i from length(Sequence) - 2 to 0:
     Let Current_Prerequisites = P (prerequisites of the current action)
     Let Current_Consequences = C (consequences of the current action)
 
-    // Identify independent components of the current consequence
-    Let Independent_Components = C - Global_Consequences_Backward[-1]
-
-    // Check for conflicts with global prerequisites
-    For each component in Independent_Components:
-        If component is in Global_Prerequisites_Backward[-1]:
-            Raise an error indicating inconsistencies
-
-    // Update global consequence and prerequisite
+    // Update global consequence
     New_Global_Consequence = Global_Consequences_Backward[-1] ⊕ C
     Global_Consequences_Backward.prepend(New_Global_Consequence)
 
-    New_Global_Prerequisite = δ(New_Global_Consequence, P)
-    Global_Prerequisites_Backward.prepend(New_Global_Prerequisite)
+    // Check for conflicts between updated global consequences and current prerequisites
+    Conflicts = δ(New_Global_Consequence, Current_Prerequisites)
+    If Conflicts is not empty:
+        Raise an error indicating inconsistencies
+
+    // Calculate independent components of the updated global consequence
+    Let Independent_Components = New_Global_Consequence - Global_Consequences_Backward[1]
+
+    // Update global prerequisite with independent components
+    For each component in Independent_Components:
+        If component is not in Global_Prerequisites_Backward[-1]:
+            Global_Prerequisites_Backward.prepend(component to Global_Prerequisites_Backward[-1])
 
 Return Global_Prerequisites_Backward, Global_Consequences_Backward
+
 ```
 
 
@@ -102,17 +105,18 @@ Return Global_Prerequisites_Backward, Global_Consequences_Backward
 ### Reverse Iteration Over Actions
 - The algorithm iterates over the sequence in reverse, starting from the second-to-last action.
 
-### Independent Components and Conflict Detection
-- For each action, it identifies the independent components of the current action's consequences (`C`) that are not already part of the **Global_Consequences_Backward**.
-- It checks each independent component for conflicts with the latest set of global prerequisites. If a conflict is found, an error indicating inconsistencies is raised.
+### Conflict Detection and Consequence Update
+- The algorithm first updates the global consequence by combining the current action's consequences (`C`) with the last state of the global consequences.
+- It then checks for conflicts between the updated global consequences and the current action's prerequisites. If conflicts are found, an error indicating inconsistencies is raised.
 
-### Update Global Consequences and Prerequisites
-- The **New_Global_Consequence** is calculated by combining the latest global consequence with the current action's consequences.
-- This new global consequence is then prepended to **Global_Consequences_Backward**.
-- **New_Global_Prerequisite** is calculated using the conflict detection operation between the **New_Global_Consequence** and the current action's prerequisites (`P`), and is prepended to **Global_Prerequisites_Backward**.
+### Independent Components Calculation
+- After updating the global consequences, the algorithm calculates the independent components of the updated global consequence. These are new elements introduced by the current action that were not part of the previous global consequences.
+
+### Update Global Prerequisites
+- The global prerequisites are updated with these independent components if they are not already included. This step ensures that new prerequisites introduced by the action are properly accounted for in the overall prerequisites of the sequence.
 
 ### Final Output
-- After processing all actions in reverse order, the algorithm returns the sequence of global prerequisites and consequences when considered backward.
+- After processing all actions in reverse order, the algorithm returns the sequence of global prerequisites and consequences when considered backward. This reflects the necessary conditions and outcomes to achieve the final goal when the sequence is traced from the end to the start.
 
 ## Integration of A* Algorithm in Logical Chain Processing
 
