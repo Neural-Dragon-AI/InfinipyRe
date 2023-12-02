@@ -1,10 +1,20 @@
 ## Logical Chain Processing Algorithms
 
-Using set theory formalism, we describe the forward and backward processing algorithms of the `LogicalChain` class. The algorithms involve two primary operations:
+This document outlines the Logical Chain Processing Algorithms, a set of computational methods designed to handle sequences of actions, each characterized by their prerequisites and consequences. Using set theory formalism, we present two core algorithms – the Forward Algorithm and the Backward Algorithm – along with an integration of the A* search algorithm. These algorithms are pivotal in scenarios where logical consistency, sequential dependencies, and optimization of action sequences are crucial.
+
+The Forward Algorithm focuses on processing action sequences from start to finish, accumulating prerequisites and consequences to understand the cumulative impact of the sequence. Conversely, the Backward Algorithm takes an end-to-start approach, identifying the prerequisites necessary to achieve a given set of consequences.
+
+Additionally, we incorporate the A* search algorithm, known for its efficiency in pathfinding and graph traversal problems. This integration is tailored to balance the optimization of action sequences with the dynamic management of evolving goals and prerequisites.
+
+Through these algorithms, we aim to provide a structured approach to decision-making processes in various domains, ensuring logical coherence and efficiency in achieving desired outcomes.
+
+The algorithms involve two primary operations:
 
 - **Join Operation with Conflict Resolution** (`A ⊕ B`): Combines two sets, where elements from the second set override conflicting elements in the first set.
 - **Conflict Detection Operation** (`δ(C, D)`): Identifies conflicts between elements of two sets.
 ## Forward Algorithm for Logical Chain Processing
+
+This algorithm iteratively processes a sequence of actions, each with its own prerequisites and consequences. The goal is to accumulate the overall prerequisites and consequences of the entire sequence.
 ```
 Initialize:
     Let Global_Prerequisites = A (prerequisites of the first action)
@@ -31,7 +41,6 @@ For each action in Sequence:
 Return Global_Prerequisites, Global_Consequences
 ```
 
-This algorithm iteratively processes a sequence of actions, each with its own prerequisites and consequences. The goal is to accumulate the overall prerequisites and consequences of the entire sequence.
 
 ### Initialization
 - **Global_Prerequisites** and **Global_Consequences** are initialized with the prerequisites of the first action (`A`).
@@ -52,6 +61,7 @@ This algorithm iteratively processes a sequence of actions, each with its own pr
 
 
 ## Backward Algorithm for Logical Chain Processing
+This algorithm processes a sequence of actions in reverse order, starting from the last action. It aims to determine the prerequisites and consequences of the sequence when considered from end to start.
 ```
 Initialize:
     Let Final_Prerequisites = P (prerequisites of the last action)
@@ -83,7 +93,7 @@ For i from length(Sequence) - 2 to 0:
 Return Global_Prerequisites_Backward, Global_Consequences_Backward
 ```
 
-This algorithm processes a sequence of actions in reverse order, starting from the last action. It aims to determine the prerequisites and consequences of the sequence when considered from end to start.
+
 
 ### Initialization
 - The algorithm initializes **Final_Prerequisites** (`P`) and **Final_Consequences** (`C`) with the prerequisites and consequences of the last action.
