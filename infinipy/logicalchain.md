@@ -36,7 +36,7 @@ For each action in Sequence:
             Raise an error indicating conflicts
 
         // Prepare prerequisites for the next iteration
-        Global_Prerequisites = Global_Prerequisites ⊕ (N - Global_Consequences)
+        Global_Prerequisites = Global_Prerequisites ⊕ (Next_Prerequisites - Global_Consequences) #there are not conflicts to solve because already solved when checking for the consequences.
 
 Return Global_Prerequisites, Global_Consequences
 ```
