@@ -69,30 +69,36 @@ Initialize:
 
     // Start with the final action's prerequisites and consequences
     Let Global_Prerequisites_Backward = [P]
-    Let Global_Consequences_Backward = [P ⊕ C]
+    Let Global_Consequences_Backward = [P ⊕ C] // Consequences override prerequisites
 
 For i from length(Sequence) - 2 to 0:
     Let Current_Prerequisites = P (prerequisites of the current action)
     Let Current_Consequences = C (consequences of the current action)
 
-    // Update global consequence
-    New_Global_Consequence = Global_Consequences_Backward[-1] ⊕ C
-    Global_Consequences_Backward.prepend(New_Global_Consequence)
+    // Combine current prerequisites and consequences
+    Combined_Current_State = Current_Prerequisites ⊕ Current_Consequences   // Consequences override prerequisites
 
-    // Check for conflicts between updated global consequences and current prerequisites
-    Conflicts = δ(New_Global_Consequence, Current_Prerequisites)
+    // Check for conflicts in the combined state with global prerequisites
+    Conflicts = δ(Combined_Current_State, Global_Prerequisites_Backward[-1])
     If Conflicts is not empty:
         Raise an error indicating inconsistencies
 
-    // Calculate independent components of the updated global consequence
-    Let Independent_Components = New_Global_Consequence - Global_Consequences_Backward[1]
+    // Update global consequences
+    New_Global_Consequence = Combined_Current_State ⊕ Global_Consequences_Backward[-1] // The global consequences take precedence over the current ones
+    Global_Consequences_Backward.prepend(New_Global_Consequence)
 
-    // Update global prerequisite with independent components
-    For each component in Independent_Components:
-        If component is not in Global_Prerequisites_Backward[-1]:
-            Global_Prerequisites_Backward.prepend(component to Global_Prerequisites_Backward[-1])
+    // Remove satisfied prerequisites from global prerequisites
+    Updated_Global_Prerequisites = Global_Prerequisites_Backward[-1] - (Combined_Current_State)
+
+    // Add non-redundant, non-conflicting prerequisites to global prerequisites
+    For each prerequisite in Current_Prerequisites:
+        If prerequisite not in Updated_Global_Prerequisites:
+            Updated_Global_Prerequisites.add(prerequisite)
+
+    Global_Prerequisites_Backward.prepend(Updated_Global_Prerequisites)
 
 Return Global_Prerequisites_Backward, Global_Consequences_Backward
+
 
 ```
 
@@ -100,23 +106,27 @@ Return Global_Prerequisites_Backward, Global_Consequences_Backward
 
 ### Initialization
 - The algorithm initializes **Final_Prerequisites** (`P`) and **Final_Consequences** (`C`) with the prerequisites and consequences of the last action.
-- **Global_Prerequisites_Backward** and **Global_Consequences_Backward** are initialized with the last action's prerequisites and the combination of its prerequisites and consequences, respectively.
+- **Global_Prerequisites_Backward** and **Global_Consequences_Backward** are initialized as follows:
+  - **Global_Prerequisites_Backward**: Set to `[P]`, capturing the prerequisites of the last action.
+  - **Global_Consequences_Backward**: Set to `[P ⊕ C]`, combining the last action's prerequisites and consequences, with consequences overriding the prerequisites.
 
 ### Reverse Iteration Over Actions
 - The algorithm iterates over the sequence in reverse, starting from the second-to-last action.
 
 ### Conflict Detection and Consequence Update
-- The algorithm first updates the global consequence by combining the current action's consequences (`C`) with the last state of the global consequences.
-- It then checks for conflicts between the updated global consequences and the current action's prerequisites. If conflicts are found, an error indicating inconsistencies is raised.
-
-### Independent Components Calculation
-- After updating the global consequences, the algorithm calculates the independent components of the updated global consequence. These are new elements introduced by the current action that were not part of the previous global consequences.
+- For each action in reverse:
+  - Combine current prerequisites and consequences into **Combined_Current_State** using the join operation (`Combined_Current_State = Current_Prerequisites ⊕ Current_Consequences`).
+  - Check for conflicts between **Combined_Current_State** and **Global_Prerequisites_Backward[-1]** using the conflict detection operation `δ(Combined_Current_State, Global_Prerequisites_Backward[-1])`. If conflicts are found, raise an error indicating inconsistencies.
+  - Update **Global_Consequences_Backward** by combining **Combined_Current_State** with the previous global consequences (`New_Global_Consequence = Combined_Current_State ⊕ Global_Consequences_Backward[-1]`), with the current combined state taking precedence.
 
 ### Update Global Prerequisites
-- The global prerequisites are updated with these independent components if they are not already included. This step ensures that new prerequisites introduced by the action are properly accounted for in the overall prerequisites of the sequence.
+- Remove prerequisites from the global list that are satisfied by **Combined_Current_State** (`Updated_Global_Prerequisites = Global_Prerequisites_Backward[-1] - Combined_Current_State`).
+- Add non-redundant, non-conflicting prerequisites from **Current_Prerequisites** to **Updated_Global_Prerequisites**.
+- Prepend **Updated_Global_Prerequisites** to **Global_Prerequisites_Backward**.
 
 ### Final Output
-- After processing all actions in reverse order, the algorithm returns the sequence of global prerequisites and consequences when considered backward. This reflects the necessary conditions and outcomes to achieve the final goal when the sequence is traced from the end to the start.
+- After processing all actions in reverse order, the algorithm returns the sequence of global prerequisites and consequences when considered backward. This sequence reflects the necessary conditions and outcomes to achieve the final goal from the end to the start.
+
 
 ## Integration of A* Algorithm in Logical Chain Processing
 
