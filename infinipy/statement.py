@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, Optional, List, Dict
+from typing import Callable, Tuple, Optional, List, Dict, Set
 from infinipy.stateblock import StateBlock
 import itertools
 
@@ -8,7 +8,8 @@ class Statement:
     def __init__(self, 
                  name: str, 
                  description: str, 
-                 condition: Callable[[StateBlock, Optional[StateBlock]], bool],
+                 callable: Callable[[StateBlock, Optional[StateBlock]], bool],
+                 usage: str = "both",
                  required_attributes: Optional[Dict[str, List[str]]] = None):
         """
         Initializes the Statement with a specific condition involving two StateBlocks.
@@ -17,9 +18,11 @@ class Statement:
         :param description: A brief description of what the condition checks for.
         :param condition: A callable that takes two StateBlock instances and returns a boolean.
         """
-        self.name = name
+        self.base_name = name
+        self.name = name+"_"+usage
         self.description = description
-        self.condition = condition
+        self.callable = callable
+        self.usage = usage
         self.source_required = required_attributes.get('source') if required_attributes else None
         self.target_required = required_attributes.get('target') if required_attributes else None
 
@@ -36,11 +39,11 @@ class Statement:
         target_missing = []
         if self.source_required:
             for attribute in self.source_required:
-                if attribute not in source_block.attributes:
+                if not hasattr(source_block, attribute):
                     source_missing.append(attribute)
         if self.target_required:
             for attribute in self.target_required:
-                if attribute not in target_block.attributes:
+                if not hasattr(target_block, attribute):
                     target_missing.append(attribute)
         if len(source_missing)>0 and len(target_missing)>0:
             return False, source_missing, target_missing
@@ -58,9 +61,13 @@ class Statement:
         :param target_block: The StateBlock instance representing the target of the action.
         :return: A string representation of the statement when the condition is met.
         """
-        if target_block is None:
-         return f"The statement {source_block.name} {self.description} is {statement_result}."
-        return f"The statement {source_block.name} {self.description} to {target_block.name} is {statement_result}."
+        if self.usage == "source":
+            return f"The statement {self.name} with description {self.description} applied to the source {source_block.name} is {statement_result}."
+        elif self.usage == "target":
+            return f"The statement {self.name} with description {self.description} applied to the target {target_block.name} is {statement_result}."
+        elif self.usage == "both":
+            return f"The statement {self.name} with description {self.description} applied to the source {source_block.name} and the target {target_block.name} is {statement_result}."
+       
     
     def create_statement_fstring_missing_attributes(self, source_block:StateBlock, target_block:  Optional[StateBlock], source_missing: Optional[List[str]], target_missing: Optional[List[str]]) -> str:
         """
@@ -89,7 +96,7 @@ class Statement:
         :param target_missing: A list of missing attributes in the target StateBlock.
         :return: A dictionary representation of the statement when the condition is met.
         """
-        return {"result":result,"source":source_block.name,"target":target_block.name if target_block else None,"statement":self.name,"stringout":self.create_statement_fstring(result,source_block, target_block),"source_missing":source_missing,"target_missing":target_missing}
+        return {"statement":self.name,"result":result, "usage":self.usage,"source":source_block.name,"target":target_block.name if target_block else None,"stringout":self.create_statement_fstring(result,source_block, target_block),"source_missing":source_missing,"target_missing":target_missing}
 
     
     def apply(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> (bool, str):
@@ -100,15 +107,27 @@ class Statement:
         :param target_block: The StateBlock instance representing the target of the action.
         :return: True if the condition is met, False otherwise.
         """
+        #check stateblock type
+        if not isinstance(source_block, StateBlock):
+            raise ValueError(f"Source block {source_block} is not a StateBlock.")
         # Check if the required attributes are present in the source and target StateBlocks
         required_attributes_present, source_missing, target_missing = self.check_required_attributes(source_block, target_block)
         if not required_attributes_present:
             return False, self.create_out_dict(False,source_block, target_block, source_missing, target_missing)
-        if not target_block:
-            statement_result = self.condition(source_block)
+        if self.usage == "source":
+            statement_result = self.callable(source_block) 
             return statement_result, self.create_out_dict(statement_result,source_block, target_block, source_missing, target_missing)
-        statement_result = self.condition(source_block, target_block)
-        return statement_result, self.create_out_dict(statement_result,source_block, target_block, source_missing, target_missing)
+        elif self.usage == "target" and target_block is not None:
+            statement_result = self.callable(target_block) 
+            return statement_result, self.create_out_dict(statement_result,source_block, target_block, source_missing, target_missing)
+        elif self.usage == "both" and target_block is not None:
+            statement_result = self.callable(source_block, target_block)
+            return statement_result, self.create_out_dict(statement_result,source_block, target_block, source_missing, target_missing)
+        elif self.usage == "both" and target_block is None:
+            raise ValueError(f"Target block is None but usage is both for statement {self.name}")
+        elif self.usage == "target" and target_block is None:
+            raise ValueError(f"Target block is None but usage is target for statement {self.name}")
+
     
     def force_true(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> (bool, str):
         return True, self.create_out_dict(True,source_block, target_block, None, None)
@@ -132,34 +151,19 @@ class Statement:
 
     
 class CompositeStatement:
-    def __init__(self, conditions: List[Tuple[Statement, str, str]]):
+    def __init__(self, substatements: List[Tuple[Statement,bool]]):
         """ Initializes the CompositeStatement with a set of unique conditions. """
         # Convert list of conditions to a set to avoid duplicates
-        self.conditions = set(conditions)
+        self.substatements = set(substatements)
+        self.statements =[x[0] for x in list(substatements)]
+        self.conditions = [x[1] for x in list(substatements)]
         self._check_for_conflicts()
         self.name = self._derive_name()
+
     
-    @classmethod
-    def from_composite_statements(cls, composite_statements: List['CompositeStatement']):
-        """
-        Class method to initialize a CompositeStatement from a list of other CompositeStatements.
-        It extracts individual statements from each CompositeStatement and combines them.
-
-        :param composite_statements: List of CompositeStatement objects.
-        :return: A new CompositeStatement consisting of the combined statements.
-        """
-        combined_conditions = set()
-        for composite in composite_statements:
-            # Extract individual statements from each composite statement
-            for condition in composite.conditions:
-                combined_conditions.add(condition)
-
-        # Create a new CompositeStatement with the combined conditions
-        return cls(list(combined_conditions))
-
     def _derive_name(self):
         """ Derives the name of the CompositeStatement based on its conditions. """
-        return f"CompositeStatement({', '.join([f'{cond[0].name} {cond[1]} {cond[2]}' for cond in self.conditions])})"
+        return f"CompositeStatement({', '.join([f'{statement.name} {cond}' for statement,cond in self.substatements])})"
 
     def _check_for_conflicts(self):
         """ Checks for logical conflicts within the conditions of the CompositeStatement. """
@@ -169,65 +173,54 @@ class CompositeStatement:
             'both': {'positive': set(), 'negative': set()}
         }
 
-        for statement, condition, usage in self.conditions:
+        for sub,cond in self.substatements:
+            statement, condition, usage = sub, cond, sub.usage
             sets = category_sets[usage]
-            if condition == 'AND':
+            if condition == True:
                 self._add_to_set_and_check_conflict(sets['positive'], sets['negative'], statement)
-            elif condition == 'AND NOT':
+            elif condition == False:
                 self._add_to_set_and_check_conflict(sets['negative'], sets['positive'], statement)
 
-    def _add_to_set_and_check_conflict(self, positive_set, negative_set, statement):
+    def _add_to_set_and_check_conflict(self, adding_set: set, checking_set: set, statement: Statement):
         """ Adds a statement to the positive set and checks for conflict with the negative set. """
-        if statement in negative_set:
+        if statement in checking_set:
             raise ValueError(f"Conflict detected for '{statement.name}' in CompositeStatement.")
-        positive_set.add(statement)
+        adding_set.add(statement)
 
-    def apply_statement_with_usage(self, statement: Statement, usage: str, source_block: StateBlock, target_block: Optional[StateBlock]) -> dict:
-        """
-        Apply the given statement based on the specified usage.
-        """
-        if usage == 'source':
-            return statement(source_block)
-        elif usage == 'target':
-            return statement(target_block)
-        elif usage == 'both':
-            return statement(source_block, target_block)
-        else:
-            raise ValueError(f"Invalid usage: {usage} for statement {statement.name} in composite statement {self.name}")
 
 
     def create_combined_fstring(self, result_strings: List[str]) -> str:
         combined_string = ""
         for i, string in enumerate(result_strings):
             if i > 0:
-                _, operator, _ = self.conditions[i]
+                operator = 'AND' if self.conditions[i] else 'AND NOT'
                 combined_string += f" {operator} "
             combined_string += string
         return combined_string
         
 
     def apply(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> dict:
-        if not self.conditions:
+        if not self.substatements:
             return {"result": True, "composite_string": "", "sub_statements": []}
 
         # Process the first condition separately
-        first_statement, first_condition, first_usage = self.conditions[0]
-        _, first_result_dict = self.apply_statement_with_usage(first_statement, first_usage, source_block, target_block)
-        composite_result = first_result_dict["result"]
+        first_statement, first_condition = self.statements[0], self.conditions[0]
+        first_result, first_result_dict = first_statement(source_block, target_block)
+        composite_result = first_result_dict["result"] == first_condition
         sub_statements = [first_result_dict]
         composite_string = [first_result_dict["stringout"]]
 
         # Iterate over the remaining conditions
-        for statement, condition, usage in self.conditions[1:]:
-            _, next_result_dict = self.apply_statement_with_usage(statement, usage, source_block, target_block)
+        for statement, condition in zip(self.statements[1:],self.conditions[1:]):
+            _, next_result_dict = statement(source_block, target_block)
             sub_statements.append(next_result_dict)
             composite_string.append(next_result_dict["stringout"])
 
 
             # Evaluate the composite result based on the condition
-            if condition == 'AND':
+            if condition == True:
                 composite_result = composite_result and next_result_dict["result"]
-            elif condition == 'AND NOT':
+            elif condition == False:
                 composite_result = composite_result and not next_result_dict["result"]
             else:
                 raise ValueError(f"Invalid condition: {condition} for statement {statement.name} in composite statement {self.name}")
@@ -236,7 +229,9 @@ class CompositeStatement:
             "result": composite_result,
             "name": self.name,
             "composite_string": self.create_combined_fstring(composite_string),
-            "sub_statements": sub_statements
+            "sub_statements": sub_statements,
+            "conditions": self.conditions,
+            "sub_results": [sub["result"] for sub in sub_statements],
         }
     
     def _force_statement(self, source_block: StateBlock, target_block: Optional[StateBlock], desired_result: bool) -> List[Dict]:
@@ -249,11 +244,11 @@ class CompositeStatement:
         :return: A list of dictionaries with hypothetical results satisfying the desired result.
         """
         results = []
-        for statement, condition, usage in self.conditions:
+        for statement, condition in zip(self.statements, self.conditions):
             # Hypothetically determine the result of each statement
-            if condition == 'AND':
+            if condition == True:
                 statement_result = desired_result
-            elif condition == 'AND NOT':
+            elif condition ==  False:
                 statement_result = not desired_result
 
             # Create a hypothetical result dictionary
@@ -282,77 +277,109 @@ class CompositeStatement:
         """
         return self._force_statement(source_block, target_block, desired_result=False)
     
-    def concatenate(self, other: 'CompositeStatement', operator: str = 'AND'):
+    def merge(self, other: 'CompositeStatement'):
         """
-        Concatenates the current CompositeStatement with another CompositeStatement.
+        Merge the current CompositeStatement with another CompositeStatement, 
+        fails if the two CompositeStatements have conflicting conditions.
         """
-        if operator not in ['AND', 'AND NOT']:
-            raise ValueError(f"Invalid operator: {operator} for concatenation.")
-        elif operator == 'AND':
-            return CompositeStatement(self.conditions + other.conditions)
-        elif operator == 'AND NOT':
-            new_operators = ['AND NOT' if condition == 'AND' else 'AND' for _, condition, _ in other.conditions]
-            new_conditions = [(statement, new_operator, usage) for (statement, _, usage), new_operator in zip(other.conditions, new_operators)]
-            return CompositeStatement(self.conditions + new_conditions)
+
+        joined_sets = self.substatements.union(other.substatements)
+        return self.__class__(list(joined_sets))
+       
+        
+    def is_conflict(self, other: 'CompositeStatement') -> Tuple[bool, List[Tuple[Statement, bool]]]:
+        """
+        Checks if there is a conflict with another CompositeStatement and returns the list of conflicts.
+        """
+        conflicts = []
+        for sub, cond in self.substatements:
+            for o_sub, o_cond in other.substatements:
+                if sub == o_sub and cond != o_cond:
+                    conflicts.append((sub, cond))
+        return (len(conflicts) > 0, conflicts)
+
+    def force_merge(self, other: 'CompositeStatement', force_direction: str = "left"):
+        """
+        Merge with resolution of conflicts based on force_direction. Returns a new CompositeStatement.
+        """
+
+
+        # Check for conflicts and get the list of conflicting statements
+        has_conflict, conflicts = self.is_conflict(other)
+
+        # Resolve conflicts based on force_direction
+        resolved_substatements = set(self.substatements)
+        for conflict in conflicts:
+            if force_direction == "left":
+                resolved_substatements.add(conflict)
+            else:
+                resolved_substatements.discard(conflict)
+                resolved_substatements.add((conflict[0], not conflict[1]))
+
+        # Add statements from the other CompositeStatement
+        for o_sub, o_cond in other.substatements:
+            if not any(sub == o_sub for sub, cond in resolved_substatements):
+                resolved_substatements.add((o_sub, o_cond))
+
+        # Re-initialize with resolved substatementsin a new CompositeStatement
+        return self.__class__(list(resolved_substatements))
+    
+    def remove_intersection(self, other: 'CompositeStatement'):
+        """
+        Remove the intersection of two CompositeStatements.
+        """
+        intersection = self.substatements.intersection(other.substatements)
+        new_substatements = self.substatements.difference(intersection)
+        return self.__class__(list(new_substatements)) 
+
+    def falsifies(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+        # Logic to check if `self` falsifies `other`
+        # Iterate over each statement in self and other and compare
+        for self_sub, self_cond in self.substatements:
+            for other_sub, other_cond in other.substatements:
+                if self_sub == other_sub and self_cond != other_cond:
+                    if (value_self and not self_cond) or (value_other and not other_cond):
+                        return True
+        return False
+
+    def is_falsified_by(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+        # Logic to check if `self` is falsified by `other`
+        # This is essentially the reverse of `falsifies`
+        return other.falsifies(self, value_other, value_self)
+
+    def validates(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+        # Logic to check if `self` validates `other`
+        # Iterate over each statement in self and other and compare
+        for self_sub, self_cond in self.substatements:
+            for other_sub, other_cond in other.substatements:
+                if self_sub == other_sub and self_cond == other_cond:
+                    if (value_self and self_cond) and (value_other and other_cond):
+                        return True
+        return False
+
+    def is_validated_by(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+        # Logic to check if `self` is validated by `other`
+        # This is essentially the reverse of `validates`
+        return other.validates(self, value_other, value_self) 
+        
+    @classmethod
+    def from_composite_statements(cls, composite_statements: List['CompositeStatement']):
+        """
+        Class method to initialize a CompositeStatement from a list of other CompositeStatements.
+        It extracts individual statements from each CompositeStatement and combines them.
+
+        :param composite_statements: List of CompositeStatement objects.
+        :return: A new CompositeStatement consisting of the combined statements.
+        """
+        combined_conditions = set()
+        for composite in composite_statements:
+            # Extract individual statements from each composite statement
+            combined_conditions= combined_conditions.union(composite.substatements)
+            
+          
+        # Create a new CompositeStatement with the combined conditions
+        list_conditions = list(combined_conditions)
+        return cls(list_conditions)
 
     def __call__(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> dict:
         return self.apply(source_block, target_block)
-
-#compares two composite statements, each with a usage, the output is a dictionary with the results for the four tuples:
-# AND, AND
-# AND, AND NOT
-# AND NOT, AND
-# AND NOT, AND NOT
-def compare_composite_statements(statement_1: Tuple[CompositeStatement, str], statement_2: Tuple[CompositeStatement, str], source: StateBlock, target: Optional[StateBlock] = None):
-    """ Compares two composite statements using their force_true, each with a usage, the output is a dictionary with the results for the four tuples. """
-
-    def force_statement(statement: CompositeStatement, force_method: str):
-        if force_method == 'AND':
-            return statement.force_true(source, target)
-        elif force_method == 'AND NOT':
-            return statement.force_false(source, target)
-        else:
-            raise ValueError(f"Invalid force method: {force_method}")
-
-    def categorize_statements(force_results_1, force_results_2):
-        consistent, inconsistent, independent = [], [], []
-
-        # Map statement names to their results for easier comparison
-        results_map_2 = {result['name']: result for result in force_results_2}
-
-        for result_1 in force_results_1:
-            name_1 = result_1['name']
-            if name_1 in results_map_2:
-                result_2 = results_map_2[name_1]
-                if result_1['result'] == result_2['result']:
-                    consistent.append(name_1)
-                else:
-                    inconsistent.append(name_1)
-            else:
-                independent.append(name_1)
-
-        # Check for statements in the second set that are not in the first set
-        names_set_1 = set(result['name'] for result in force_results_1)
-        for name_2 in results_map_2:
-            if name_2 not in names_set_1:
-                independent.append(name_2)
-
-        return consistent, inconsistent, independent
-
-    # Force statements with the specified methods
-    force_results_1_and = force_statement(statement_1[0], 'AND')
-    force_results_1_and_not = force_statement(statement_1[0], 'AND NOT')
-    force_results_2_and = force_statement(statement_2[0], 'AND')
-    force_results_2_and_not = force_statement(statement_2[0], 'AND NOT')
-
-    # Comparing the combinations of forced results
-    results = {
-        'AND, AND': categorize_statements(force_results_1_and, force_results_2_and),
-        'AND, AND NOT': categorize_statements(force_results_1_and, force_results_2_and_not),
-        'AND NOT, AND': categorize_statements(force_results_1_and_not, force_results_2_and),
-        'AND NOT, AND NOT': categorize_statements(force_results_1_and_not, force_results_2_and_not),
-    }
-
-    return results
-
-
