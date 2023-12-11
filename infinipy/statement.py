@@ -5,6 +5,7 @@ import itertools
 
 
 class Statement:
+    _name_registry = set()  # Class-level registry to track names
     def __init__(self, 
                  name: str, 
                  description: str, 
@@ -18,6 +19,10 @@ class Statement:
         :param description: A brief description of what the condition checks for.
         :param condition: A callable that takes two StateBlock instances and returns a boolean.
         """
+        if name in Statement._name_registry:
+            raise ValueError(f"A Statement with the name '{name}' already exists.")
+
+        Statement._name_registry.add(name)  # Add name to registry
         self.base_name = name
         self.name = name+"_"+usage
         self.description = description
@@ -146,7 +151,22 @@ class Statement:
     
         return self.apply(source_block, target_block)
     
+    def __eq__(self, other):
+        """
+        Override the equality operator to compare based on the base_name attribute.
 
+        :param other: Another Statement object to compare with.
+        :return: True if the base names are the same, False otherwise.
+        """
+        return isinstance(other, Statement) and self.base_name == other.base_name
+    
+    def __hash__(self):
+        """
+        Override the hash method to be consistent with the __eq__ method.
+        
+        :return: The hash based on the base_name.
+        """
+        return hash(self.base_name)
 
 
     
@@ -164,29 +184,14 @@ class CompositeStatement:
     def _derive_name(self):
         """ Derives the name of the CompositeStatement based on its conditions. """
         return f"CompositeStatement({', '.join([f'{statement.name} {cond}' for statement,cond in self.substatements])})"
-
+    
     def _check_for_conflicts(self):
-        """ Checks for logical conflicts within the conditions of the CompositeStatement. """
-        category_sets = {
-            'source': {'positive': set(), 'negative': set()},
-            'target': {'positive': set(), 'negative': set()},
-            'both': {'positive': set(), 'negative': set()}
-        }
-
-        for sub,cond in self.substatements:
-            statement, condition, usage = sub, cond, sub.usage
-            sets = category_sets[usage]
-            if condition == True:
-                self._add_to_set_and_check_conflict(sets['positive'], sets['negative'], statement)
-            elif condition == False:
-                self._add_to_set_and_check_conflict(sets['negative'], sets['positive'], statement)
-
-    def _add_to_set_and_check_conflict(self, adding_set: set, checking_set: set, statement: Statement):
-        """ Adds a statement to the positive set and checks for conflict with the negative set. """
-        if statement in checking_set:
-            raise ValueError(f"Conflict detected for '{statement.name}' in CompositeStatement.")
-        adding_set.add(statement)
-
+        """Checks for logical conflicts within the conditions of the CompositeStatement."""
+        for statement1, cond1 in self.substatements:
+            for statement2, cond2 in self.substatements:
+                if statement1 == statement2 and cond1 != cond2:
+                    raise ValueError(f"Conflict detected for '{statement1.name}' in CompositeStatement.")
+    
 
 
     def create_combined_fstring(self, result_strings: List[str]) -> str:
@@ -278,24 +283,22 @@ class CompositeStatement:
         return self._force_statement(source_block, target_block, desired_result=False)
     
     def merge(self, other: 'CompositeStatement'):
-        """
-        Merge the current CompositeStatement with another CompositeStatement, 
-        fails if the two CompositeStatements have conflicting conditions.
-        """
+        """Merges with another CompositeStatement, checking for conflicts."""
+        has_conflict, conflicts = self.is_conflict(other)
+        if has_conflict:
+            conflict_descriptions = ', '.join([f"'{statement.name}'" for statement, _ in conflicts])
+            raise ValueError(f"Cannot merge due to conflicts in {conflict_descriptions}.")
 
-        joined_sets = self.substatements.union(other.substatements)
-        return self.__class__(list(joined_sets))
+        return CompositeStatement(list(self.substatements.union(other.substatements)))
        
         
     def is_conflict(self, other: 'CompositeStatement') -> Tuple[bool, List[Tuple[Statement, bool]]]:
-        """
-        Checks if there is a conflict with another CompositeStatement and returns the list of conflicts.
-        """
+        """Checks if there is a conflict with another CompositeStatement."""
         conflicts = []
-        for sub, cond in self.substatements:
-            for o_sub, o_cond in other.substatements:
-                if sub == o_sub and cond != o_cond:
-                    conflicts.append((sub, cond))
+        for sub1, cond1 in self.substatements:
+            for sub2, cond2 in other.substatements:
+                if sub1 == sub2 and cond1 != cond2:
+                    conflicts.append((sub1, cond1))
         return (len(conflicts) > 0, conflicts)
 
     def force_merge(self, other: 'CompositeStatement', force_direction: str = "left"):
@@ -332,14 +335,13 @@ class CompositeStatement:
         new_substatements = self.substatements.difference(intersection)
         return self.__class__(list(new_substatements)) 
 
-    def falsifies(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+    def falsifies(self, other: 'CompositeStatement') -> bool:
         # Logic to check if `self` falsifies `other`
         # Iterate over each statement in self and other and compare
         for self_sub, self_cond in self.substatements:
             for other_sub, other_cond in other.substatements:
                 if self_sub == other_sub and self_cond != other_cond:
-                    if (value_self and not self_cond) or (value_other and not other_cond):
-                        return True
+                    return True
         return False
 
     def is_falsified_by(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
@@ -347,14 +349,16 @@ class CompositeStatement:
         # This is essentially the reverse of `falsifies`
         return other.falsifies(self, value_other, value_self)
 
-    def validates(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+    def validates(self, other: 'CompositeStatement') -> bool:
         # Logic to check if `self` validates `other`
         # Iterate over each statement in self and other and compare
+        statements_to_satisfy = len(other.substatements)
         for self_sub, self_cond in self.substatements:
             for other_sub, other_cond in other.substatements:
                 if self_sub == other_sub and self_cond == other_cond:
-                    if (value_self and self_cond) and (value_other and other_cond):
-                        return True
+                    statements_to_satisfy -= 1
+        if statements_to_satisfy == 0:
+            return True
         return False
 
     def is_validated_by(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:

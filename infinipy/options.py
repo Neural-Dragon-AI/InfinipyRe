@@ -4,14 +4,14 @@ from typing import Tuple, Optional
 from infinipy.statement import CompositeStatement
 
 class Option:
-    def __init__(self):
+    def __init__(self, starting_dict: Optional[dict] = None):
         """
         Initializes the Option class with empty global prerequisites and consequences.
         These are managed as dictionaries indexed by (source_id, target_id) tuples.
         """
         self.actions = []
-        self.global_prerequisites = defaultdict(CompositeStatement)
-        self.global_consequences = defaultdict(CompositeStatement)
+        self.global_prerequisites = defaultdict(CompositeStatement) #if starting_dict is None else starting_dict
+        self.global_consequences = defaultdict(CompositeStatement) if starting_dict is None else starting_dict
 
     def append(self, action: Action):
         """
@@ -49,7 +49,7 @@ class Option:
             global_pre = self.global_prerequisites.get(key,CompositeStatement([]))
             #check if there are conflicts between the current prerequisites and the global consequences
             if current_pre:
-                print("current_pre",current_pre.name)
+                # print("current_pre",current_pre.name)
                 has_conflict,conflicts = global_con.is_conflict(current_pre)
                 if has_conflict:
                     return False
@@ -59,12 +59,12 @@ class Option:
                 # the merge shouldbe safe because we checked for conflicts ex-ante
                 
                 self.global_prerequisites[key] = global_pre.merge(current_pre_clean)
-                print("global_pre",self.global_prerequisites[key])
+                # print("global_pre",self.global_prerequisites[key])
             #now update the global consequences with the current consequences with merge_force
             if current_con:
-                print("current_con",current_con.name)
+                # print("current_con",current_con.name)
                 self.global_consequences[key] = global_con.force_merge(current_con,force_direction="right")
-                print(self.global_consequences[key])
+                # print(self.global_consequences[key])
         return True
 
         

@@ -9,156 +9,144 @@ from infinipy.affordance import Affordance
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Union, Tuple
 from datetime import datetime
-from infinipy.goap_logger import GOAPLogger
+from copy import deepcopy
+from infinipy.actions import Action
+from infinipy.options import Option
+from infinipy.worldstatement import WorldStatement
 
-class GOAPPlanner:
-    def __init__(self, affordances: List[Affordance]):
-        self.affordances = affordances
-        self.ongoing_plans = {}  # Initialize the ongoing plans dictionary
-        self.logger = GOAPLogger()  # Initialize the logger
-        self.prerequisites = self.extract_prerequisites(affordances)
+
+def print_conditions(cond_dict : dict, with_key = False):
+    for key,value in cond_dict.items():
+        if with_key:
+            print(key)
+        print(value.name)
+
+
+class GOAP:
+    def __init__(self, actions: List[Action]):
+        """
+        Initializes the GOAP class with a list of actions.
         
-
-    def extract_prerequisites(self, affordances: List[Affordance]) -> Dict[str, Statement]:
-        prerequisites = {}
-        total_prerequisites = 0
-        for affordance in affordances:
-            for prerequisite in affordance.prerequisites:
-                prerequisites[prerequisite.name] = prerequisite
-                total_prerequisites += 1
-                for substatement in prerequisite.conditions:
-                    compstat = CompositeStatement([substatement])
-                    prerequisites[compstat.name] = compstat
-                    prerequisites[substatement[0].name] = substatement[0]
-                    total_prerequisites += 1
-                    self.logger.log_create_composite_statement(affordance.name, prerequisite.name, compstat.name)
-
-        self.logger.log_extract_prerequisites(len(affordances), total_prerequisites)
-        return prerequisites
-
-    def get_filtered_subgoals(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock) -> List[Tuple[Statement, bool]]:
-        goal_dict_raw = goal[0].force_true(entity)[0]
-        goal_dict = copy.deepcopy(goal_dict_raw)
-
-        satisfied_subgoals = []
-        target_subgoals = []
-
-        for substatement in goal_dict_raw["sub_statements"]:
-            current_result = self.prerequisites[substatement["statement"]].apply(entity)[1]["result"]
-            if substatement["result"] == current_result:
-                goal_dict["sub_statements"].remove(substatement)
-                satisfied_subgoals.append(substatement["statement"])
-            else:
-                target_subgoals.append(substatement["statement"])
-
-        self.logger.log_filtered_subgoals(goal[0].name, entity, satisfied_subgoals, target_subgoals)
-        return goal_dict
+        :param actions: List of actions.
+        """
+        self.actions = actions
+        self.terminal_world = None
+        self.solutions= []
     
-    def find_terminal_affordances(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock) -> List[Tuple[List[Tuple[Affordance, int]], List[Tuple[Affordance, int]]]]:
+    def forward_solve(self, start_state: WorldStatement, goal_state: WorldStatement):
+        """
+        Finds a solution to reach the goal state from the start state.
+        
+        :param start_state: Starting WorldStatement.
+        :param goal_state: Goal WorldStatement to achieve.
+        """
+        available_actions = start_state.available_actions(self.actions)
+        self.recursive_solve(start_state, available_actions, goal_state)
 
-        terminal_affordances = []
-        partial_affordances = []
-        goal_dict = self.get_filtered_subgoals(goal, entity)
-        num_substatements = len(goal_dict["sub_statements"])
-        matched_substatements_set = set()
+    def backward_solve(self, end_state: WorldStatement, goal_state: WorldStatement):
+        """
+        Finds a backward solution from the current end state to a goal starting state.
+        
+        :param end_state: Current WorldStatement.
+        :param goal_state: Goal WorldStatement to achieve.
+        
+        """
 
-        for affordance in self.affordances:
-            num_matching_substatements = 0
-            matching_substatements = []
-
-            transformations_dict_list = affordance.force_consequence_true(entity)
-            for composite_transformer in transformations_dict_list:
-                for transformer in composite_transformer:
-                    for consequence in transformer:
-                        if consequence["name"] == goal[0].name and consequence["result"] == goal[1]:
-                            terminal_affordances.append((affordance, num_substatements))
-                            # Log each terminal affordance match
-                            self.logger.log_terminal_affordances(goal[0].name, entity, [affordance], [])
-                        else:
-                            for substatement in consequence["sub_statements"]:
-                                for goal_substatement in goal_dict["sub_statements"]:
-                                    if substatement["statement"] == goal_substatement["statement"] and substatement["result"] == goal_substatement["result"]:
-                                        num_matching_substatements += 1
-                                        matching_substatements.append(substatement)
-                                        matched_substatements_set.add(substatement["statement"])
-
-            if num_matching_substatements == num_substatements:
-                terminal_affordances.append((affordance, num_substatements))
-                # Log the complete terminal affordance found
-                self.logger.log_terminal_affordances(goal[0].name, entity, [affordance], [])
-            elif num_matching_substatements > 0:
-                partial_affordances.append((affordance, num_matching_substatements))
-                # Log the partial affordance found
-                self.logger.log_terminal_affordances(goal[0].name, entity, [], [affordance])
-
-        if len(matched_substatements_set) < num_substatements and len(terminal_affordances) == 0:
-            # Log when a goal is not achievable
-            self.logger.log_terminal_affordances(goal[0].name, entity, [], [])
-
-        return terminal_affordances, partial_affordances
-
-    def find_subgoals_for_affordance(self, affordance: Affordance, entity: StateBlock) -> List[str]:
-        subgoals = []
-        why_not_applicable = affordance.why_not_applicable(entity)
-
-        # Replace the initial logging call with the specialized logger method
-        self.logger.log_evaluating_affordance_applicability(affordance.name, entity.name)
-
-        for reason in why_not_applicable:
-            subgoals.append(reason[0])
-            # Replace the logging call for each subgoal identification
-            self.logger.log_identifying_subgoal_for_affordance(affordance.name, reason[0], entity.name)
-
-        return subgoals
-
-    def is_goal_achieved(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock) -> bool:
-        goal_achieved = goal[0].apply(entity)["result"] == goal[1]
-
-        # Use the specialized logging method for goal achievement evaluation
-        self.logger.log_goal_achieved(goal[0].name, entity, goal_achieved)
-
-        return goal_achieved
-
-
-    def achieve_goal(self, goal: Union[Tuple[CompositeStatement, bool], Tuple[Statement, bool]], entity: StateBlock, applied_actions: List[Affordance] = [], depth: int = 0, plan_id=None) -> List[Affordance]:
-        if plan_id is None:
-            plan_id = uuid.uuid4()  # Generate a unique ID for the plan
-            self.ongoing_plans[plan_id] = []  # Initialize the plan entry
-
-        if depth > 10:  # Avoid infinite recursion
-            self.logger.log_recursion_limit_reached(goal[0].name, depth, entity)
-            return applied_actions
-
-        self.logger.log_achieve_goal_start(goal[0].name, entity, depth)
-        if self.is_goal_achieved(goal, entity):
-            self.logger.log_goal_already_achieved(goal[0].name, entity, depth)
-            return applied_actions
-
-        terminal_affordances, partial_affordances = self.find_terminal_affordances(goal, entity)
-        for affordance_tuple in terminal_affordances + partial_affordances:
-            affordance = affordance_tuple[0]
-            if affordance not in self.ongoing_plans[plan_id]:  # Check if affordance is not already applied in this plan
-                self.ongoing_plans[plan_id].append(affordance)
-                applied_actions.append(affordance)
-                self.logger.log_applying_affordance(affordance, entity, depth)
-
-                if affordance.is_applicable(entity):  # Check if the affordance achieves the goal
-                    self.logger.log_goal_achieved(goal[0].name, entity, True)
-                    return applied_actions
-                else:
-                    next_subgoals = self.find_subgoals_for_affordance(affordance, entity)
-                    for subgoal_name in next_subgoals:
-                        subgoal_statement = self.prerequisites[subgoal_name]
-                        result = self.achieve_goal((subgoal_statement, True), entity, applied_actions, depth + 1, plan_id)
-                        if affordance.is_applicable(entity):  # Check again after subgoals
-                            return result
-
-        self.logger.log_achieve_goal_end(goal[0].name, entity, depth, applied_actions)
-        return applied_actions
+        current_option = Option(starting_dict=end_state.conditions)
+        available_actions = end_state.available_actions(self.actions, reverse=True)
+        self.backward_recursive_solve(current_option, available_actions, goal_state,end_state,[], visited_states=[end_state])
     
-    def print_reasoning(self):
-        self.logger.print_plan()
+    def recursive_solve(self,current_state: WorldStatement, 
+                    available_actions: List[Action], 
+                    goal_state: WorldStatement, 
+                    current_path: List[Action] = [],
+                    visited_states: List[WorldStatement] = [],):
+        """
+        Recursive function to find a solution to reach the goal state.
+        
+        :param current_state: Current WorldStatement.
+        :param available_actions: List of available actions.
+        :param goal_state: Goal WorldStatement to achieve.
+        :param current_path: List of actions taken so far.
+        """
+        # Base case: Check if the goal is achieved
+        if goal_state.is_validated_by(current_state):
+            print("Solution found:", " -> ".join([action.name for action in current_path]))
+            return True
 
-    
+        # Recursive step: Try each available action
+        for action in available_actions:
+            print("Trying action:", action.name)
+            new_option = Option(starting_dict=deepcopy(current_state.conditions))
+            new_option.append(action)
+            new_world = WorldStatement.from_dict(new_option.global_consequences)
+            if any([visited_state.is_falsified_by(new_world) for visited_state in visited_states]):
+                continue
+            new_available_actions = new_world.available_actions(self.actions)
+            
+            # Recurse with the updated state and path
+            if self.recursive_solve(new_world, new_available_actions, goal_state, current_path + [action], visited_states + [new_world]):
+                self.terminal_world = new_world
+                return True
+
+        # Return False if no solution found in this path
+        return False
+    def backward_recursive_solve(self,
+        current_option: Option, 
+        available_actions: List[Action], 
+        goal_state: WorldStatement,
+        start_state:WorldStatement, 
+        current_path: List[Action] = [],
+        visited_states: List[WorldStatement] = [],
+        max_depth: int = 10,  # Default maximum depth
+      
+    ):
+        """
+        Recursive function to find a backward solution from the current end state to a goal starting state.
+
+        :param current_option: Current Option with actions.
+        :param available_actions: List of available actions.
+        :param goal_state: Goal WorldStatement to achieve.
+        :param current_path: List of actions taken so far in reverse order.
+        :param max_depth: Maximum depth of recursion allowed.
+        """
+        # Check if maximum recursion depth is reached
+        if max_depth <= 0:
+            print("Maximum recursion depth reached.")
+            return False
+
+        # Base case: Check if the global prerequisites of the current option satisfy the goal state
+        global_prerequisites = WorldStatement.from_dict(current_option.global_prerequisites)
+        global_consequences = WorldStatement.from_dict(current_option.global_consequences)
+        if len(current_path) > 0 and goal_state.validates(global_prerequisites):
+            print("Backward solution found:", " <- ".join([action.name for action in reversed(current_path)]))
+            self.solutions.append(current_path)
+            return False
+
+        # Recursive step: Try each available action that leads to the current state
+        for action in available_actions:
+            print("Trying action:", action.name)
+            new_option = deepcopy(current_option)
+            new_option.prepend(action)
+            new_world = WorldStatement.from_dict(new_option.global_prerequisites)
+            if new_world.falsifies(global_consequences):
+                print("State falsifies global consequences")
+                print_conditions(new_world.conditions)
+                continue
+            if any([visited_state.validates(new_world) for visited_state in visited_states]):
+                print("State already visited")
+                print_conditions(new_world.conditions)
+                continue
+        
+                    
+            new_available_actions = new_world.available_actions(self.actions, reverse=True)  # Get actions leading to this state
+            print("New available actions:", [action.name for action in new_available_actions])
+            current_path = [action] + current_path
+            print("Current path:", " <- ".join([action.name for action in reversed(current_path)]))
+            if self.backward_recursive_solve(new_option, new_available_actions, goal_state,start_state, current_path, visited_states + [new_world], max_depth - 1):
+                return True
+
+        # Return False if no solution found in this path
+        return False
 
 
