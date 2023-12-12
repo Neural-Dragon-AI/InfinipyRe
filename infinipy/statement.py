@@ -1,6 +1,7 @@
 from typing import Callable, Tuple, Optional, List, Dict, Set
 from infinipy.stateblock import StateBlock
 import itertools
+from dataclasses import dataclass, field, fields
 
 
 
@@ -132,13 +133,7 @@ class Statement:
             raise ValueError(f"Target block is None but usage is both for statement {self.name}")
         elif self.usage == "target" and target_block is None:
             raise ValueError(f"Target block is None but usage is target for statement {self.name}")
-
-    
-    def force_true(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> (bool, str):
-        return True, self.create_out_dict(True,source_block, target_block, None, None)
-    
-    def force_false(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> (bool, str):
-        return False, self.create_out_dict(False,source_block, target_block, None, None)
+        
 
     def __call__(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> bool:
         """
@@ -238,49 +233,7 @@ class CompositeStatement:
             "conditions": self.conditions,
             "sub_results": [sub["result"] for sub in sub_statements],
         }
-    
-    def _force_statement(self, source_block: StateBlock, target_block: Optional[StateBlock], desired_result: bool) -> List[Dict]:
-        """
-        Generates hypothetical results for each statement in the composite to satisfy a desired global result.
 
-        :param source_block: The StateBlock representing the source of the action.
-        :param target_block: The StateBlock representing the target of the action.
-        :param desired_result: The desired global result (True or False).
-        :return: A list of dictionaries with hypothetical results satisfying the desired result.
-        """
-        results = []
-        for statement, condition in zip(self.statements, self.conditions):
-            # Hypothetically determine the result of each statement
-            if condition == True:
-                statement_result = desired_result
-            elif condition ==  False:
-                statement_result = not desired_result
-
-            # Create a hypothetical result dictionary
-            result_dict = statement.create_out_dict(statement_result, source_block, target_block, None, None)
-            results.append(result_dict)
-
-        return results
-
-    def force_true(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> List[Dict]:
-        """
-        Generates hypothetical results for each statement in the composite to make the global condition true.
-
-        :param source_block: The StateBlock representing the source of the action.
-        :param target_block: The StateBlock representing the target of the action.
-        :return: A list of dictionaries representing hypothetical results that make the global condition true.
-        """
-        return self._force_statement(source_block, target_block, desired_result=True)
-
-    def force_false(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> List[Dict]:
-        """
-        Generates hypothetical results for each statement in the composite to make the global condition false.
-
-        :param source_block: The StateBlock representing the source of the action.
-        :param target_block: The StateBlock representing the target of the action.
-        :return: A list of dictionaries representing hypothetical results that make the global condition false.
-        """
-        return self._force_statement(source_block, target_block, desired_result=False)
     
     def merge(self, other: 'CompositeStatement'):
         """Merges with another CompositeStatement, checking for conflicts."""

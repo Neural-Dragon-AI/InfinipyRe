@@ -104,15 +104,5 @@ class Action:
         """
         return self.consequences(self.source_block, self.target_block)
     
-    def force_consequences(self) -> dict:
-        """
-        Applies the consequences of the action without checking the prerequisites.
-
-        :param source_block: The StateBlock instance representing the source of the action.
-        :param target_block: The StateBlock instance representing the target of the action.
-        :return: A dictionary indicating the effects of the action and the details of each consequence.
-        """
-        return self.consequences.force_true(self.source_block, self.target_block)
-
     def __repr__(self):
         return f"Action(name={self.name}, prerequisites={self.prerequisites}, consequences={self.consequences}, source_block={self.source_block}, target_block={self.target_block})"
