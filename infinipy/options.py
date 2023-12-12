@@ -2,123 +2,140 @@ from infinipy.actions import Action
 from collections import defaultdict
 from typing import Tuple, Optional
 from infinipy.statement import CompositeStatement
+from infinipy.worldstatement import WorldStatement
 
 class Option:
-    def __init__(self, starting_dict: Optional[dict] = None):
+    def __init__(self, starting_consequences: Optional[WorldStatement] = None,starting_prerequisites:  Optional[WorldStatement] = None, clamp_starting_consequences: bool = False):
         """
-        Initializes the Option class with empty global prerequisites and consequences.
-        These are managed as dictionaries indexed by (source_id, target_id) tuples.
+        Initializes the Option class from WorldStatements with empty global prerequisites and consequences.
+        If starting_world is not None, it is used as the starting point for the global prerequisites.
+        This implies that actions that are appended to the sequence must have prerequisites that are not falsified by the starting_world.
+        If ending_world is not None, it is used as the starting point for the global consequences and only actions that lead to compatible consequences can be appended.
+        These are managed as WorldStatements which contain dictionaries indexed by (source_id, target_id) tuples. and Tuples with Comp
         """
         self.actions = []
-        self.global_prerequisites = defaultdict(CompositeStatement) #if starting_dict is None else starting_dict
-        self.global_consequences = defaultdict(CompositeStatement) if starting_dict is None else starting_dict
+        self.clamp_starting_consequences = clamp_starting_consequences
+        self.global_consequences = starting_consequences if starting_consequences is not None else WorldStatement([])
+        #global prerequisites are initialized with the  starting_prerequiistes if non None 
+        starting_prerequisites = starting_consequences if starting_prerequisites is None and starting_consequences is not None else starting_prerequisites
+        self.global_prerequisites = starting_prerequisites if starting_prerequisites is not None else WorldStatement([])
+        
 
-    def append(self, action: Action):
+    def print_conditions(self):
+        """
+        Prints nicely formatted conditions using f-strings
+        """
+        print(f"Global Prerequisites:")
+        self.global_prerequisites.print_conditions()
+        print(f"Global Consequences:")
+        self.global_consequences.print_conditions()
+
+    def append(self, action: Action,allows_extra_pre: bool = False):
         """
         Appends an action and updates the global prerequisites and consequences.
 
         :param action: The action to be appended.
         """
-        self.actions.append(action)
-        self.update_forward(action)
+        
+        if self.update_forward(action,allows_extra_pre):
+            self.actions.append(action)
+            return True
+        return False
 
-    def prepend(self, action: Action):
+    def prepend(self, action: Action,must_satisfy_pre: bool = False):
         """
         Prepends an action and updates the global prerequisites and consequences.
 
         :param action: The action to be prepended.
         """
-        self.actions.insert(0, action)
-        self.update_backward(action)
+        if self.update_backward(action,must_satisfy_pre):
+            self.actions.insert(0, action)
+            return True
+        return False
 
-    def update_forward(self, action: Action):
+    def update_forward(self, action: Action, allows_extra_pre: bool = False):
         """
         Updates the global prerequisites and consequences in a forward direction for a single action.
 
         :param action: The action to process.
         """
-        #first we check that the action does not have conflicting prerequisite with the 
-        #current global consequences
         
-        for category in ['source', 'target', 'both']:
-            key = self._get_key(action, category)
-            current_pre = action.pre_dict.get(key, None)
-            current_con = action.con_dict.get(key, None)
+        #extract the action pre and consequence and convert to WorldStatement
+        action_pre = WorldStatement.from_dict(action.pre_dict)
+        action_con = WorldStatement.from_dict(action.con_dict)
+        #first we check that the action does not have conflicting prerequisite with the current consquences
+        # that is that the consequense not falsify the prereq
+        #in that case it is not possible to append the action
+        if self.global_consequences.falsifies(action_pre):
+            print(f"The action {action.name} cannot be appended because the global consequences falsify the action prereq")
+            return False
+        #now we check if the action adds additional prereq that are not already in the global prereq
+        # and if allows_extra_pre is False we return False
+        if not self.global_consequences.validates(action_pre):
+            #some of the prereq are not satisfied by the global consequences
+            unsatisfied_pre = action_pre.remove_intersection(self.global_consequences)
+            if not allows_extra_pre:
+                print(f"The action {action.name} cannot be apppended because it adds additional prereq that are not satisfied by the global consequences and allows_extra_pre is False")
+                print("Unsatisfied prereq:")
+                unsatisfied_pre.print_conditions()
+                return False
 
-            global_con = self.global_consequences.get(key,CompositeStatement([]))
-            global_pre = self.global_prerequisites.get(key,CompositeStatement([]))
-            #check if there are conflicts between the current prerequisites and the global consequences
-            if current_pre:
-                # print("current_pre",current_pre.name)
-                has_conflict,conflicts = global_con.is_conflict(current_pre)
-                if has_conflict:
-                    return False
-                #remove the prerequisite already satisfied by the global consequences
-                current_pre_clean = current_pre.remove_intersection(global_con)
-                #updates the global prerequisite with the current prerequisites using merge
-                # the merge shouldbe safe because we checked for conflicts ex-ante
-                
-                self.global_prerequisites[key] = global_pre.merge(current_pre_clean)
-                # print("global_pre",self.global_prerequisites[key])
-            #now update the global consequences with the current consequences with merge_force
-            if current_con:
-                # print("current_con",current_con.name)
-                self.global_consequences[key] = global_con.force_merge(current_con,force_direction="right")
-                # print(self.global_consequences[key])
+            #we update the global prereq with the unsatisfied prereq
+            self.global_prerequisites = self.global_prerequisites.merge(unsatisfied_pre)
+
+        #we update the global consequences with the action consequences with merge_force
+        self.global_consequences = self.global_consequences.force_merge(action_con,force_direction="right")
         return True
 
         
 
-    def update_backward(self, action: Action):
+    def update_backward(self, action: Action, must_satisfy_pre: bool = False):
         """
         Updates the global prerequisites and consequences in a backward direction for a single action.
 
         :param action: The action to process.
         """
-        for category in ['source', 'target', 'both']:
-            key = self._get_key(action, category)
-            current_pre = action.pre_dict.get(key, None)
-            current_con = action.con_dict.get(key, None)
+        #extract the action pre and consequence and convert to WorldStatement
+        action_pre = WorldStatement.from_dict(action.pre_dict)
+        action_con = WorldStatement.from_dict(action.con_dict)
 
-            global_con = self.global_consequences.get(key,CompositeStatement([]))
-            global_pre = self.global_prerequisites.get(key,CompositeStatement([]))
+        #case 1 the action consequences are not conflicting with the current state of the world
+        # the current state of the world is the global_prerequisite if actions are already present
+        # otherwise it is the global_consequences if no actions are present 
+        # if there is no consequence and no action it is an empty WorldStatement
+        global_pre = self.global_prerequisites
 
-            #first check that current conseuqences do not conflict with global prerequisites
-            if current_con:
-                has_conflict,conflicts = global_pre.is_conflict(current_con)
-                if has_conflict:
-                    return False
-              
-                #update the global consequences with the current consequences 
-                # giving precedence to the global consequences
-                self.global_consequences[key] = global_con.force_merge(current_con,force_direction="left")
-             
-                #remove from the global prereq the prereq already satisfied by the current consequences
-                global_pre_clean = global_pre.remove_intersection(current_con)
-                # add to the global prereq the current prereq with precedence to the global prereq
-                # this way we overwrite current_prereq which are conflicting with the global prereq
-                # but are solved by the current consequences, non solved conflcits are catched above
-                # by the is_conflict check
-                if current_pre:
-                    self.global_prerequisites[key] = global_pre_clean.force_merge(current_pre,force_direction="left")
-        return True
+        if action_con.falsifies(global_pre):
+            print(f"The action {action.name} cannot be prepended because the action consequences falsify the global prereq")
+            return False
+        
+        
+        #now we check if the action consequence fully satisfies the global prereq 
+        #or some prereq of the previous state are not satisfied by the action consequence
+        #in that case we need to update the global prereq or return false based on must_satisfy_pre
+        if not action_con.validates(global_pre):
+            #some of the prereq are not satisfied by the global consequences
+            unsatisfied_pre = global_pre.remove_intersection(action_con)
+            if must_satisfy_pre:
+                print(f"The action {action.name} cannot be prepended because the action consequences do not fully satisfy the global prereq and must_satisfy_pre is True")
+                print("Unsatisfied prereq:")
+                unsatisfied_pre.print_conditions()
+                return False
 
-    def _get_key(self, action: Action, category: str):
-        """
-        Derives the appropriate key based on the category.
-
-        :param action: The action being processed.
-        :param category: The category ('source', 'target', or 'both').
-        :return: A tuple representing the key.
-        """
-        if category == 'both':
-            return (action.source_block.id, action.target_block.id)
-        elif category == 'source':
-            return (action.source_block.id, None)
-        elif category == 'target':
-            return (None, action.target_block.id)
+            #we update the global pre by removing the prereq already satisfied by the action consequences
+            # we do it by combining the unsatisfied_pre with the new action pre, this should be a safe operation
+            # because the pre-req of the action that could conflict with the global prereq are either
+            # non conflicting any more because the consequence removed the previously conflicting prereq
+            # or detected as conflicting in action_con.validates(global_pre) and therefore not present in unsatisfied_pre
+            # tldr if a prereq was conflicting only before the action consequence it means that the actions consequence that changed its values is now binding and therefore the prereq is not conflicting any more because it does not exist
+            # if the prereq was conflicting before the action consequence and is still conflicting after the action consequence due to transitivyty of the prereq than it would have been detected as conflicting in action_con.validates(global_pre) and therefore not present in unsatisfied_pre
+            self.global_prerequisites = unsatisfied_pre.merge(action_pre)
         else:
-            raise ValueError(f"Unknown category: {category}")
+            self.global_prerequisites = action_pre
+        #now we update the global consequences with the action consequences with merge_force giving precedence to the global consequences
+        # because the future has precedence over the past
+        self.global_consequences = self.global_consequences.force_merge(action_con,force_direction="left")
+        return True
 
     def __repr__(self):
         return f"Option(actions={self.actions})"

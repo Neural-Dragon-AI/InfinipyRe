@@ -1,10 +1,10 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from infinipy.stateblock import StateBlock
 from infinipy.statement import CompositeStatement
 
 from typing import List, Tuple, Optional
 from infinipy.stateblock import StateBlock
-from infinipy.statement import CompositeStatement
+from infinipy.statement import CompositeStatement, Statement
 from infinipy.actions import Action
 
 class WorldStatement:
@@ -17,7 +17,14 @@ class WorldStatement:
         self.statements = statements
         self.conditions = self.categorize_statements()
 
-    def categorize_statements(self) -> dict:
+    def print_conditions(self):
+        """
+        Prints nicely formatted conditions using f-strings
+        """
+        for key, value in self.conditions.items():
+            print(f"{key}: {value.name}")
+
+    def categorize_statements(self) -> Dict[Tuple[Optional[str], Optional[str]], CompositeStatement]:
         """
         Categorizes the statements into separate dictionaries based on their source and target StateBlocks.
 
@@ -39,7 +46,7 @@ class WorldStatement:
 
         return conditions_dict
 
-    def _derive_key(self, statement, source_id, target_id):
+    def _derive_key(self, statement:Statement, source_id:str, target_id:str):
         """
         Derives the appropriate key for the conditions dictionary.
 
@@ -56,6 +63,64 @@ class WorldStatement:
             return (source_id, target_id)
         else:
             raise ValueError(f"Unknown usage category: {statement.usage}")
+        
+    def remove_intersection(self, other: 'WorldStatement') -> 'WorldStatement':
+        """
+        Removes statements in the current WorldStatement that are also in another WorldStatement.
+
+        :param other: The other WorldStatement to compare against.
+        :return: A new WorldStatement object.
+        """
+        merged_statements = []
+        for key in self.conditions.keys():
+            if key in other.conditions:
+                merged_statements.append((self.conditions[key].remove_intersection(other.conditions[key]), key[0], key[1]))
+            else:
+                merged_statements.append((self.conditions[key], key[0], key[1]))
+        return WorldStatement(merged_statements)
+        
+    def merge(self, other: 'WorldStatement') -> 'WorldStatement':
+        """
+        Merges the current WorldStatement with another WorldStatement, giving precedence to the current WorldStatement.
+        It works by iterating through all the statements in both WorldStatements and 
+        a) if the statement is in both WorldStatements, it merges the statements with the current WorldStatement precedence
+        b) if the statement is only in one WorldStatement, it adds the statement to the merged WorldStatement
+
+        :param other: The other WorldStatement to merge with.
+        :return: A new WorldStatement object.
+        """
+        merged_statements = []
+        for key in self.conditions.keys():
+            if key in other.conditions:
+                merged_statements.append((self.conditions[key].merge(other.conditions[key]), key[0], key[1]))
+            else:
+                merged_statements.append((self.conditions[key], key[0], key[1]))
+        for key in other.conditions.keys():
+            if key not in self.conditions:
+                merged_statements.append((other.conditions[key], key[0], key[1]))
+        return WorldStatement(merged_statements)
+        
+    def force_merge(self, other: 'WorldStatement', force_direction: str = "left") -> 'WorldStatement':
+        """
+        Merges the current WorldStatement with another WorldStatement, giving precedence to the force direction.
+        It works by iterating through all the statements in both WorldStatements and 
+        a) if the statement is in both WorldStatements, it merges the statements with the force_direction precedence
+        b) if the statement is only in one WorldStatement, it adds the statement to the merged WorldStatement
+
+        :param other: The other WorldStatement to merge with.
+        :param force_direction: The direction to force the merge. Can be "left" or "right".
+        :return: A new WorldStatement object.
+        """
+        merged_statements = []
+        for key in self.conditions.keys():
+            if key in other.conditions:
+                merged_statements.append((self.conditions[key].force_merge(other.conditions[key], force_direction), key[0], key[1]))
+            else:
+                merged_statements.append((self.conditions[key], key[0], key[1]))
+        for key in other.conditions.keys():
+            if key not in self.conditions:
+                merged_statements.append((other.conditions[key], key[0], key[1]))
+        return WorldStatement(merged_statements)
 
     def falsifies(self, other: 'WorldStatement') -> bool:
         for key in self.conditions.keys():
