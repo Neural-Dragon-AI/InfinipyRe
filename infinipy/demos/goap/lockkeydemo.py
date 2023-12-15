@@ -34,7 +34,7 @@ doorkey = StateBlock(
     can_act=True,
     can_move=False,
     can_be_moved=True,
-    position=(0, 0, 0),  # Position of the key in the environment
+    position=(0, 0),  # Position of the key in the environment
 )
 
 door = Door(
@@ -48,7 +48,7 @@ door = Door(
     can_act=False,
     can_move=False,
     can_be_moved=False,
-    position=(0, 0, 0),  # Position of the door in the environment
+    position=(0, 0),  # Position of the door in the environment
     is_open=False,  # Custom attribute indicating if the door is open
     is_locked=True,  # Custom attribute indicating if the door is locked
     key_id=doorkey.id,  # Custom attribute indicating the key that can open the door
@@ -65,7 +65,7 @@ character = StateBlock(
     can_act=True,
     can_move=True,
     can_be_moved=False,
-    position=(0, 0, 0),  # Position of the character in the environment
+    position=(0, 0),  # Position of the character in the environment
 )
 entities = [door, doorkey, character]
 

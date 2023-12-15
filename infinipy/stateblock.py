@@ -17,7 +17,7 @@ class StateBlock:
     can_act: bool
     can_move: bool
     can_be_moved: bool
-    position: Tuple[int, int, int]
+    position: Tuple[int, int]
     inventory: List['StateBlock'] = field(default_factory=list)  # Default value arguments
     inventory_size: int = 10  # Default value argument
     stored_in: Optional['StateBlock'] = None  # Default value argument
@@ -65,15 +65,5 @@ class StateBlock:
         # Return a dictionary representing the schema of the StateBlock
         return {field.name: str(field.type) for field in dataclasses.fields(cls)}
     
-    def to_types(self):
-        # Return a dictionary representing the current types of the StateBlock attributes
-        # with special handling for iterables to get the subtype
-        types_dict = {}
-        for field in dataclasses.fields(self):
-            value = getattr(self, field.name)
-            if isinstance(value, tuple):
-                types_dict[field.name] = f"Tuple[{', '.join(str(type(subvalue).__name__) for subvalue in value)}]"
-            else:
-                types_dict[field.name] = type(value).__name__
-        return types_dict
+
 

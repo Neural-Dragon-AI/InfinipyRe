@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, Optional, List, Dict, Set
+from typing import Callable, Tuple, Optional, List, Dict, Set, Union
 from infinipy.stateblock import StateBlock
 import itertools
 from dataclasses import dataclass, field, fields
@@ -20,18 +20,24 @@ class Statement:
         :param description: A brief description of what the condition checks for.
         :param condition: A callable that takes two StateBlock instances and returns a boolean.
         """
-        if name in Statement._name_registry:
-            raise ValueError(f"A Statement with the name '{name}' already exists.")
+        new_name = name+"_"+usage
+        if new_name in Statement._name_registry:
+            raise ValueError(f"A Statement with the name '{new_name}' already exists.")
 
-        Statement._name_registry.add(name)  # Add name to registry
+        Statement._name_registry.add(new_name)  # Add name to registry
         self.base_name = name
-        self.name = name+"_"+usage
+        self.name = new_name
         self.description = description
         self.callable = callable
         self.usage = usage
         self.source_required = required_attributes.get('source') if required_attributes else None
         self.target_required = required_attributes.get('target') if required_attributes else None
 
+
+    #class method to retrun the current state ot the name registry
+    @classmethod
+    def get_name_registry(cls):
+        return cls._name_registry
     
     def check_required_attributes(self, source_block: StateBlock, target_block: Optional[StateBlock]) -> bool:
         """
@@ -148,20 +154,20 @@ class Statement:
     
     def __eq__(self, other):
         """
-        Override the equality operator to compare based on the base_name attribute.
+        Override the equality operator to compare based on the name attribute.
 
         :param other: Another Statement object to compare with.
         :return: True if the base names are the same, False otherwise.
         """
-        return isinstance(other, Statement) and self.base_name == other.base_name
+        return isinstance(other, Statement) and self.name == other.name
     
     def __hash__(self):
         """
         Override the hash method to be consistent with the __eq__ method.
         
-        :return: The hash based on the base_name.
+        :return: The hash based on the name.
         """
-        return hash(self.base_name)
+        return hash(self.name)
 
 
     
@@ -297,10 +303,10 @@ class CompositeStatement:
                     return True
         return False
 
-    def is_falsified_by(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+    def is_falsified_by(self, other: 'CompositeStatement') -> bool:
         # Logic to check if `self` is falsified by `other`
         # This is essentially the reverse of `falsifies`
-        return other.falsifies(self, value_other, value_self)
+        return other.falsifies(self)
 
     def validates(self, other: 'CompositeStatement') -> bool:
         # Logic to check if `self` validates `other`
@@ -314,10 +320,10 @@ class CompositeStatement:
             return True
         return False
 
-    def is_validated_by(self, other: 'CompositeStatement', value_self=True, value_other=True) -> bool:
+    def is_validated_by(self, other: 'CompositeStatement') -> bool:
         # Logic to check if `self` is validated by `other`
         # This is essentially the reverse of `validates`
-        return other.validates(self, value_other, value_self) 
+        return other.validates(self) 
         
     @classmethod
     def from_composite_statements(cls, composite_statements: List['CompositeStatement']):
@@ -340,3 +346,6 @@ class CompositeStatement:
 
     def __call__(self, source_block: StateBlock, target_block: Optional[StateBlock] = None) -> dict:
         return self.apply(source_block, target_block)
+    
+
+
